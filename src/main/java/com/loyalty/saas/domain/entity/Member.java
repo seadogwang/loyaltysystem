@@ -64,6 +64,14 @@ public class Member implements Serializable {
     @Builder.Default
     private String status = "ENROLLED";
 
+    /** 当前等级代码 */
+    @Column(name = "tier_code", length = 16)
+    private String tierCode;
+
+    /** 写入该数据时的 Schema 版本号 */
+    @Column(name = "schema_version", length = 16)
+    private String schemaVersion;
+
     /** 动态扩展属性 (JSONB) */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "ext_attributes", nullable = false, columnDefinition = "jsonb")
