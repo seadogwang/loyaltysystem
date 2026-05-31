@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: [['html', { outputFolder: 'playwright-report' }], ['list']],
   timeout: 30000,
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:6173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -18,8 +18,8 @@ export default defineConfig({
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
   ],
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
+    command: 'npm run dev -- --port 6173 --strictPort',
+    url: 'http://localhost:6173',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },
