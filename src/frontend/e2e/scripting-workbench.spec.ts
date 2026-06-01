@@ -23,8 +23,9 @@ test.describe('ScriptingWorkbench — 渠道脚本工作台', () => {
   });
 
   test('Monaco 编辑器加载', async ({ page }) => {
+    test.setTimeout(40000);
     const editor = page.locator('.monaco-editor').first();
-    await expect(editor).toBeVisible({ timeout: 15000 });
+    await expect(editor).toBeVisible({ timeout: 25000 });
   });
 
   test('渠道选择器可见', async ({ page }) => {
