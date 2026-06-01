@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { ConfigProvider, Layout, Menu, Tabs, theme } from 'antd';
-import { BuildOutlined, FormOutlined, CodeOutlined } from '@ant-design/icons';
+import { ConfigProvider, Layout, Tabs, theme } from 'antd';
+import { BuildOutlined, FormOutlined, CodeOutlined, PartitionOutlined } from '@ant-design/icons';
 import SchemaBuilder from './components/SchemaBuilder/SchemaBuilder';
 import DynamicRenderer from './components/DynamicRenderer/DynamicRenderer';
 import ScriptingWorkbench from './components/ScriptingWorkbench/ScriptingWorkbench';
+import EntityModeler from './components/EntityModeler/EntityModeler';
 
 const { Header, Content } = Layout;
 
@@ -12,7 +13,8 @@ const App: React.FC = () => {
   const { token } = theme.useToken();
 
   const tabItems = [
-    { key: 'builder', label: 'Schema 设计器', icon: <BuildOutlined /> },
+    { key: 'entity-modeler', label: '实体建模器', icon: <PartitionOutlined /> },
+    { key: 'builder', label: '表单设计器', icon: <BuildOutlined /> },
     { key: 'renderer', label: '动态渲染器', icon: <FormOutlined /> },
     { key: 'scripting', label: '渠道脚本工作台', icon: <CodeOutlined /> },
   ];
@@ -43,6 +45,7 @@ const App: React.FC = () => {
             }))}
           />
           <div style={{ height: 'calc(100vh - 118px)', overflow: 'auto' }}>
+            {activeTab === 'entity-modeler' && <EntityModeler />}
             {activeTab === 'builder' && (
               <SchemaBuilder
                 entityType="MEMBER"
