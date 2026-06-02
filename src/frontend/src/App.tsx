@@ -127,7 +127,7 @@ const App: React.FC = () => {
           <Menu
             mode="inline"
             selectedKeys={[activePage]}
-            defaultOpenKeys={['member', 'points', 'ops']}
+            defaultOpenKeys={['modeling', 'member', 'points', 'tier-rule', 'channel', 'ops']}
             onClick={({ key }) => setActivePage(key as PageKey)}
             items={menuItems.map(group => ({
               key: group.key,
