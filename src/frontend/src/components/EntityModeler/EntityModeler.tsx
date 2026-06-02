@@ -435,12 +435,22 @@ const EntityModeler: React.FC = () => {
     return JSON.stringify(schema, null, 2);
   }, [entities, relationships]);
 
-  // Canvas drop logic
-  const [{ isOver }, dropRef] = useDrop(() => ({
-    accept: CANVAS_DRAG_TYPE,
-    drop: (item: { templateType: string }) => addEntity(item.templateType),
-    collect: (monitor) => ({ isOver: monitor.isOver() }),
-  }), [addEntity]);
+  // CanvasArea child component — uses useDrop INSIDE DndProvider context
+  const CanvasArea: React.FC<{ children: React.ReactNode }> = React.useCallback(({ children }) => {
+    const [{ isOver: over }, dropRef] = useDrop(() => ({
+      accept: CANVAS_DRAG_TYPE,
+      drop: (item: { templateType: string }) => addEntity(item.templateType),
+      collect: (m) => ({ isOver: m.isOver() }),
+    }), [addEntity]);
+    return (
+      <div ref={dropRef} style={{
+        minHeight: 500, padding: 24, borderRadius: 12,
+        background: over ? '#e6f4ff' : '#fafafa',
+        border: `3px dashed ${over ? '#1677ff' : '#d9d9d9'}`,
+        transition: 'all 0.2s',
+      }}>{children}</div>
+    );
+  }, [addEntity]) as any;
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 'calc(100vh - 180px)', gap: 0, background: '#f5f5f5' }}>
@@ -455,7 +465,7 @@ const EntityModeler: React.FC = () => {
               字段直接点击编辑
             </Text>
           </div>
-        </div>
+          </CanvasArea>
 
         {/* 中央画布 */}
         <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
@@ -478,15 +488,7 @@ const EntityModeler: React.FC = () => {
             </Space>
           </div>
 
-          <div
-            ref={dropRef}
-            style={{
-              minHeight: 500, padding: 24, borderRadius: 12,
-              background: isOver ? '#e6f4ff' : '#fafafa',
-              border: `3px dashed ${isOver ? '#1677ff' : '#d9d9d9'}`,
-              transition: 'all 0.2s',
-            }}
-          >
+          <CanvasArea>
             {entities.length === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -520,7 +522,7 @@ const EntityModeler: React.FC = () => {
               </div>
             )}
           </div>
-        </div>
+          </CanvasArea>
       </div>
 
       {/* 关联弹窗 */}

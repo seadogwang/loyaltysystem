@@ -9,8 +9,7 @@ import {
   CheckCircleOutlined, SendOutlined, ArrowRightOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import { DndProvider, useDrag, useDrop } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
+import { useDrag, useDrop } from 'react-dnd';
 import type { FieldSchema, JsonSchema, ComponentRegistryEntry } from '../../types';
 import { checkFieldDeprecation, saveSchema, getSchema } from '../../api';
 
@@ -247,7 +246,7 @@ const SchemaBuilder: React.FC<SchemaBuilderProps> = ({ entityType = 'MEMBER', on
   const deprecatedCount = Object.values(schema.properties).filter(f => f.deprecated).length;
 
   return (
-    <DndProvider backend={HTML5Backend}>
+    <>
       {/* ====== 顶部操作流程指引 ====== */}
       <div style={{ padding: '16px 16px 0 16px' }}>
         <Card size="small" style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}>
@@ -362,7 +361,7 @@ const SchemaBuilder: React.FC<SchemaBuilderProps> = ({ entityType = 'MEMBER', on
           )}
         </div>
       </div>
-    </DndProvider>
+    </>
   );
 };
 
