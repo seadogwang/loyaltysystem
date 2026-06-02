@@ -62,13 +62,17 @@ const DynamicRenderer: React.FC<DynamicRendererProps> = ({
     (async () => {
       setLoading(true);
       try {
-        const [schemaData, member] = await Promise.all([
-          getSchema('MEMBER'),
-          getMember(memberId),
+        const [schemaData, memberData] = await Promise.all([
+          getSchema('MEMBER').catch(() => null),
+          getMember(memberId).catch(() => null),
         ]);
-        setSchema(schemaData.schema);
-        setMemberData(member);
-        form.setValues(member.ext_attributes || {});
+        const ext = (memberData && typeof memberData === 'object' && 'ext_attributes' in memberData)
+          ? (memberData as any).ext_attributes : {};
+        if (schemaData && typeof schemaData === 'object' && 'schema' in schemaData) {
+          setSchema((schemaData as any).schema);
+        }
+        if (memberData) setMemberData(memberData as any);
+        form.setValues(ext || {});
       } catch (e) {
         console.error('[DynamicRenderer] 加载失败:', e);
       } finally {
@@ -80,16 +84,17 @@ const DynamicRenderer: React.FC<DynamicRendererProps> = ({
   // 判断是否为历史版本
   const isDataVersionOutdated = useMemo(() => {
     if (!memberData || !schema) return false;
-    const dataVersion = memberData.ext_attributes?._schema_version || memberData.schema_version;
-    return dataVersion && dataVersion !== schema.version;
+    const ext = (memberData as any).ext_attributes;
+    const dataVersion = ext?._schema_version || (memberData as any).schema_version;
+    return dataVersion && (schema as any).version && dataVersion !== (schema as any).version;
   }, [memberData, schema]);
 
   // 分隔活跃和废弃字段
   const { activeFields, deprecatedFields } = useMemo(() => {
-    if (!schema) return { activeFields: {}, deprecatedFields: {} };
+    if (!schema || !schema.properties) return { activeFields: {}, deprecatedFields: {} };
     const active: Record<string, FieldSchema> = {};
     const deprecated: Record<string, FieldSchema> = {};
-    for (const [key, field] of Object.entries(schema.properties)) {
+    for (const [key, field] of Object.entries(schema.properties || {})) {
       if (field.deprecated) {
         deprecated[key] = field;
       } else {

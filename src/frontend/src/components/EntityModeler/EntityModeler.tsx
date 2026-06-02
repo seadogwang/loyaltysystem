@@ -444,7 +444,7 @@ const EntityModeler: React.FC = () => {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <div style={{ display: 'flex', height: 'calc(100vh - 140px)', gap: 0, background: '#f5f5f5' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 'calc(100vh - 180px)', gap: 0, background: '#f5f5f5' }}>
 
         {/* 左工具栏 */}
         <div style={{ width: 220, padding: 12, background: '#fff', borderRight: '1px solid #e8e8e8' }}>
