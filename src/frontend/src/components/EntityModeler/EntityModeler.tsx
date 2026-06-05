@@ -20,11 +20,6 @@ import {
 } from './utils';
 import type { EntityFieldExt, EntityKind, EntityNodeData, EntityFlowNode, EntityFlowEdge } from './types';
 
-// ==================== 自定义节点/边类型（memoized） ====================
-
-const nodeTypes = useMemo(() => ({ entityNode: EntityNodeComponent }), []);
-const edgeTypes = useMemo(() => ({ entityEdge: CustomEdgeComponent }), []);
-
 // ==================== 初始节点/边 ====================
 
 const initialNodes: EntityFlowNode[] = SYSTEM_ENTITIES.map(entityToFlowNode);
@@ -33,6 +28,9 @@ const initialEdges: EntityFlowEdge[] = SYSTEM_RELATIONS.map(relationToFlowEdge);
 // ==================== 主组件 ====================
 
 const EntityModeler: React.FC = () => {
+  // 自定义节点/边类型（memoized）
+  const nodeTypes = useMemo(() => ({ entityNode: EntityNodeComponent }), []);
+  const edgeTypes = useMemo(() => ({ entityEdge: CustomEdgeComponent }), []);
   const [nodes, setNodes, onNodesChange] = useNodesState<EntityFlowNode>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<EntityFlowEdge>(initialEdges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
