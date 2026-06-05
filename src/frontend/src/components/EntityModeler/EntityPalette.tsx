@@ -34,6 +34,23 @@ const EntityPalette: React.FC<EntityPaletteProps> = ({ onAddEntity, onImport }) 
         点击添加实体
       </Text>
 
+      {/* 系统实体按钮 */}
+      <div
+        onClick={() => onAddEntity('system')}
+        style={{
+          padding: '4px 8px', marginBottom: 4, borderRadius: 4,
+          background: '#fff', cursor: 'pointer',
+          border: `1px solid ${COLORS.system}`, fontSize: 12,
+          display: 'flex', alignItems: 'center', gap: 6,
+          transition: 'background 0.2s',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+      >
+        <DragOutlined style={{ fontSize: 12 }} />🔒 系统实体
+        <Text type="secondary" style={{ fontSize: 10, marginLeft: 'auto' }}>S</Text>
+      </div>
+
       {/* 业务实体按钮 */}
       <div
         onClick={() => onAddEntity('business')}

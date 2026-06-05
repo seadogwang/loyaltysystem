@@ -21,8 +21,8 @@ export function entityToFlowNode(e: EntityNode): EntityFlowNode {
       storageKey: e.storageKey,
       storageType: e.storageType,
     },
-    draggable: e.kind !== 'system',
-    deletable: e.kind !== 'system',
+    draggable: true,
+    deletable: true,
   };
 }
 
@@ -45,7 +45,7 @@ export function relationToFlowEdge(r: EntityRelation): EntityFlowEdge {
       label: r.label,
       locked: r.locked,
     },
-    deletable: !r.locked,
+    deletable: true,
     style: {
       stroke: r.locked ? '#999' : '#1677ff',
       strokeWidth: 2,
@@ -179,7 +179,8 @@ export function createNewEntityNode(
   idCounter: { current: number },
 ): EntityFlowNode {
   const id = `e_${++idCounter.current}`;
-  const name = kind === 'business' ? '新业务实体' : '新API实体';
+  const names: Record<EntityKind, string> = { system: '新系统实体', business: '新业务实体', api: '新API实体' };
+  const name = names[kind];
   return {
     id,
     type: 'entityNode',

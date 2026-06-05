@@ -45,16 +45,15 @@ const EntityModeler: React.FC = () => {
   const addEntity = useCallback((kind: EntityKind) => {
     const newNode = createNewEntityNode(kind, idCounter);
     setNodes((nds: EntityFlowNode[]) => [...nds, newNode]);
-    message.success(`已添加${kind === 'business' ? '业务实体' : 'API实体'}`);
+    const kindNames: Record<EntityKind, string> = { system: '系统实体', business: '业务实体', api: 'API实体' };
+    message.success(`已添加${kindNames[kind]}`);
   }, [setNodes]);
 
   const deleteEntity = useCallback((nodeId: string) => {
-    const node = nodes.find(n => n.id === nodeId);
-    if (node?.data.kind === 'system') return;
     setNodes((nds: EntityFlowNode[]) => nds.filter(n => n.id !== nodeId));
     setEdges((eds: EntityFlowEdge[]) => eds.filter(e => e.source !== nodeId && e.target !== nodeId));
     if (selectedNodeId === nodeId) setSelectedNodeId(null);
-  }, [nodes, setNodes, setEdges, selectedNodeId]);
+  }, [setNodes, setEdges, selectedNodeId]);
 
   const selectNode = useCallback((id: string) => {
     setSelectedNodeId(id);
@@ -140,6 +139,7 @@ const EntityModeler: React.FC = () => {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 's' || e.key === 'S') addEntity('system');
       if (e.key === 'b' || e.key === 'B') addEntity('business');
       if (e.key === 'a' || e.key === 'A') addEntity('api');
     };

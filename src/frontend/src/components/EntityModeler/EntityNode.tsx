@@ -77,7 +77,6 @@ const EntityNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
         fontSize: 12, fontWeight: 600, cursor: 'pointer',
       }}>
         <span>{BADGES[nodeData.kind]} {displayName}</span>
-        {!isSystem && (
           <Space size={2}>
             <Button size="small" type="text" icon={<SettingOutlined />}
               style={{ color: '#fff', fontSize: 14, height: 20 }}
@@ -86,7 +85,6 @@ const EntityNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
               style={{ color: '#fff', fontSize: 14, height: 20 }}
               onClick={(e) => { e.stopPropagation(); deleteNode(id); }} />
           </Space>
-        )}
       </div>
 
       {/* 字段列表 */}
@@ -110,12 +108,10 @@ const EntityNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
         ))}
       </div>
 
-      {/* 添加字段按钮（非系统实体） */}
-      {!isSystem && (
-        <Button type="dashed" size="small" block icon={<PlusOutlined />}
-          style={{ margin: '2px 4px', width: 'calc(100% - 8px)', fontSize: 11, height: 24 }}
-          onClick={handleAddField}>添加字段</Button>
-      )}
+      {/* 添加字段按钮 */}
+      <Button type="dashed" size="small" block icon={<PlusOutlined />}
+        style={{ margin: '2px 4px', width: 'calc(100% - 8px)', fontSize: 11, height: 24 }}
+        onClick={handleAddField}>添加字段</Button>
     </div>
   );
 };
