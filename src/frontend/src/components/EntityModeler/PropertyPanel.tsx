@@ -24,12 +24,22 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ field, onChange, onClose 
           key: 'struct', label: '结构配置', children: (
             <div>
               <div style={{ marginBottom: 10 }}>
-                <Text type="secondary" style={{ fontSize: 11 }}>字段名</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>字段名 (英文标识)</Text>
+                <Input
+                  size="small"
+                  value={field.key}
+                  disabled={field.locked}
+                  onChange={e => onChange({ ...field, key: e.target.value })}
+                  style={{ fontFamily: 'monospace' }}
+                />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <Text type="secondary" style={{ fontSize: 11 }}>备注 (中文说明)</Text>
                 <Input
                   size="small"
                   value={field.name}
-                  disabled={field.locked}
                   onChange={e => onChange({ ...field, name: e.target.value })}
+                  placeholder="字段的中文说明"
                 />
               </div>
               <div style={{ marginBottom: 10 }}>
