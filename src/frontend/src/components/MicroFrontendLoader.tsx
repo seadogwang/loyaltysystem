@@ -43,7 +43,7 @@ const MicroFrontendLoader: React.FC<MicroAppProps & Record<string, unknown>> = (
       onLoad?.();
       // 生产环境: qiankun loadMicroApp() 或 Module Federation 动态 import()
       try {
-        const Component = (window as Record<string, unknown>)[moduleName];
+        const Component = (window as unknown as Record<string, unknown>)[moduleName];
         if (Component && containerRef.current) {
           // React 18 createRoot rendering would happen here
         }
@@ -67,7 +67,7 @@ const MicroFrontendLoader: React.FC<MicroAppProps & Record<string, unknown>> = (
   if (error) return <Alert type="error" message="组件加载失败" description={error} showIcon />;
 
   return (
-    <Card size="small" style={{ border: '1px dashed #d9d9d9', background: '#fafafa' }}>
+    <Card size="small" style={{ border: '1px dashed #d9d9d9', background: '#fff' }}>
       <Text type="secondary" style={{ fontSize: 12 }}>
         🔌 微前端组件: {moduleName} ({microApp})
       </Text>

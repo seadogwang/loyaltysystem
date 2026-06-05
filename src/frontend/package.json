@@ -10,18 +10,21 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@formily/core": "^2.3.1",
-    "@formily/react": "^2.3.1",
     "@formily/antd-v5": "^1.1.1",
+    "@formily/core": "^2.3.1",
     "@formily/json-schema": "^2.3.1",
+    "@formily/react": "^2.3.1",
     "@monaco-editor/react": "^4.6.0",
+    "@xyflow/react": "^12.11.0",
     "antd": "^5.12.0",
     "axios": "^1.6.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
-    "uuid": "^9.0.0"
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.16.0",
+    "uuid": "^9.0.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

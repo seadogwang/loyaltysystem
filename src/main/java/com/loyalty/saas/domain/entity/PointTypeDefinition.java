@@ -18,6 +18,18 @@ public class PointTypeDefinition {
     @Column(name = "is_transferable") @Builder.Default private Boolean isTransferable = false;
     @Column(name = "allow_negative") @Builder.Default private Boolean allowNegative = false;
     @Column(name = "expiry_days") @Builder.Default private Integer expiryDays = 365;
+
+    // 新增：有效期模式 (FIXED_DAYS / CALENDAR_MONTHS / CALENDAR_YEARS)
+    @Column(name = "expiry_mode", length = 30) @Builder.Default private String expiryMode = "FIXED_DAYS";
+    // 新增：有效期值（天数/月数/年数）
+    @Column(name = "expiry_value") @Builder.Default private Integer expiryValue = 365;
+    // 新增：是否在前端可见
+    @Column(name = "is_visible") @Builder.Default private Boolean isVisible = true;
+    // 新增：透支上限（默认值，实际每会员账户可覆盖）
+    @Column(name = "overdraft_limit", precision = 20, scale = 4) @Builder.Default private java.math.BigDecimal overdraftLimit = java.math.BigDecimal.ZERO;
+    // 新增：授信额度（默认值，实际每会员账户可覆盖）
+    @Column(name = "credit_limit", precision = 20, scale = 4) @Builder.Default private java.math.BigDecimal creditLimit = java.math.BigDecimal.ZERO;
+
     @Column(name = "config_json", columnDefinition = "jsonb")
     @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     private Map<String, Object> configJson;

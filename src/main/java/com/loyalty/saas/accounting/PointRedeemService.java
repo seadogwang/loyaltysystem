@@ -88,21 +88,26 @@ public class PointRedeemService {
 
         log.info("[Redeem] 核销开始: member={}, type={}, amount={}", memberId, accountType, pointsToRedeem);
 
-        // ---- Step 1: 获取账户风控参数 ----
+        // ---- Step 1: 获取本账户和 CREDIT 账户风控参数 ----
         MemberAccount account = accountRepo.findByMemberIdAndTypeForUpdate(
                         programCode, memberId, accountType)
                 .orElseThrow(() -> new BusinessException("ERR_ACCOUNT_NOT_FOUND",
                         "MemberAccount not found: " + programCode + "/" + memberId + "/" + accountType));
+
+        // 加载 CREDIT 账户（信用额度在独立账户上）
+        MemberAccount creditAccount = accountRepo.findByMemberIdAndTypeForUpdate(
+                programCode, memberId, "CREDIT").orElse(null);
 
         final Long accountId = account.getAccountId();
 
         // ---- Step 2: 实时汇总可用余额 ----
         BigDecimal availableBalance = txRepo.sumAvailableBalance(programCode, memberId, accountType);
 
-        // 计算总可用额度 = 自有余额 + 剩余信用额度
-        BigDecimal creditAvailable = account.getCreditLimit().subtract(account.getCreditUsed());
-        if (creditAvailable.compareTo(BigDecimal.ZERO) < 0) {
-            creditAvailable = BigDecimal.ZERO;
+        // 计算信用可用额度 = CREDIT 账户的 credit_limit - credit_used
+        BigDecimal creditAvailable = BigDecimal.ZERO;
+        if (creditAccount != null) {
+            creditAvailable = creditAccount.getCreditLimit().subtract(creditAccount.getCreditUsed());
+            if (creditAvailable.compareTo(BigDecimal.ZERO) < 0) creditAvailable = BigDecimal.ZERO;
         }
         BigDecimal totalAvailable = availableBalance.add(creditAvailable);
 
@@ -172,9 +177,9 @@ public class PointRedeemService {
                     batch.getId(), allocateAmount, newRemaining, remainingToRedeem);
         }
 
-        // ---- Step 6: 自有余额不足 → 信用额度透支 ----
-        if (remainingToRedeem.compareTo(BigDecimal.ZERO) > 0) {
-            processCreditDrawdown(programCode, memberId, accountType, accountId, account,
+        // ---- Step 6: 自有余额不足 → 信用额度透支（CREDIT 账户） ----
+        if (remainingToRedeem.compareTo(BigDecimal.ZERO) > 0 && creditAccount != null) {
+            processCreditDrawdown(programCode, memberId, creditAccount,
                     redemptionTx, remainingToRedeem);
         }
 
@@ -231,26 +236,28 @@ public class PointRedeemService {
     }
 
     /**
-     * 信用额度透支——当自有余额已全部扣完，差额从信用额度中扣除。
+     * 信用额度透支——当自有余额已全部扣完，差额从 CREDIT 账户中扣除。
+     * 设计文档 4.3.1 Step 6: 在 CREDIT 账户增加 credit_used，生成 CREDIT_DRAWDOWN 流水。
      */
-    private void processCreditDrawdown(String programCode, Long memberId, String accountType,
-                                        Long accountId, MemberAccount account, AccountTransaction redemptionTx,
+    private void processCreditDrawdown(String programCode, Long memberId,
+                                        MemberAccount creditAccount, AccountTransaction redemptionTx,
                                         BigDecimal shortfall) {
-        BigDecimal creditRemaining = account.getCreditLimit().subtract(account.getCreditUsed());
+        BigDecimal creditRemaining = creditAccount.getCreditLimit().subtract(creditAccount.getCreditUsed());
         if (creditRemaining.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("ERR_CREDIT_EXHAUSTED",
                     "信用额度已用尽，无法完成核销。缺口: " + shortfall.toPlainString());
         }
 
         BigDecimal drawdownAmount = shortfall.min(creditRemaining);
-        account.setCreditUsed(account.getCreditUsed().add(drawdownAmount));
+        creditAccount.setCreditUsed(creditAccount.getCreditUsed().add(drawdownAmount));
+        accountRepo.save(creditAccount);
 
-        // 生成 CREDIT_DRAWDOWN 流水
+        // 在 CREDIT 账户生成 CREDIT_DRAWDOWN 流水（负数，表示信用负债增加）
         AccountTransaction drawdownTx = AccountTransaction.builder()
-                .accountId(accountId)
+                .accountId(creditAccount.getAccountId())
                 .programCode(programCode)
                 .memberId(memberId)
-                .accountType(accountType)
+                .accountType("CREDIT")
                 .transactionType("CREDIT_DRAWDOWN")
                 .amount(drawdownAmount.negate().setScale(SCALE, RoundingMode.HALF_UP))
                 .remainingAmount(BigDecimal.ZERO)
@@ -261,8 +268,8 @@ public class PointRedeemService {
                 .build();
         txRepo.save(drawdownTx);
 
-        log.info("[Redeem] 信用额度透支: amount={}, creditUsed={}/{}",
-                drawdownAmount, account.getCreditUsed(), account.getCreditLimit());
+        log.info("[Redeem] CREDIT 账户透支: amount={}, creditUsed={}/{}",
+                drawdownAmount, creditAccount.getCreditUsed(), creditAccount.getCreditLimit());
 
         // 如有剩余缺口（超过信用额度），抛异常
         BigDecimal finalShortfall = shortfall.subtract(drawdownAmount);

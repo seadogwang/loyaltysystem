@@ -5,14 +5,14 @@ import {
   FormItem, Input, NumberPicker, Select, Switch, DatePicker,
   FormLayout, FormButtonGroup, Submit,
 } from '@formily/antd-v5';
-import { Button, Card, Tag, Alert, Collapse, Space, Spin, Empty, Badge } from 'antd';
+import { Button, Card, Tag, Alert, Collapse, Space, Spin, Empty, Badge, message } from 'antd';
 import { ExclamationCircleOutlined, EditOutlined, EyeOutlined, HistoryOutlined } from '@ant-design/icons';
 import type { JsonSchema, FieldSchema, MemberData, RenderMode } from '../../types';
 import { getSchema, getMember, updateMember, checkFieldDeprecation } from '../../api';
 
 // ==================== Formily 组件注册 ====================
 /** Formily 原生支持的组件列表 */
-const BUILTIN_COMPONENTS: Record<string, React.FC<unknown>> = {
+const BUILTIN_COMPONENTS: Record<string, React.FC<any>> = {
   Input, NumberPicker, Select, Switch, DatePicker,
 };
 
@@ -20,7 +20,7 @@ const BUILTIN_COMPONENTS: Record<string, React.FC<unknown>> = {
  * 动态注册自定义组件（可在此扩展）。
  * 设计文档 8.2.1 节：支持 Program 级别扩充自定义 x-component。
  */
-const registerCustomComponent = (name: string, component: React.FC<unknown>) => {
+const registerCustomComponent = (name: string, component: React.FC<any>) => {
   BUILTIN_COMPONENTS[name] = component;
 };
 
@@ -119,7 +119,7 @@ const DynamicRenderer: React.FC<DynamicRendererProps> = ({
       setSaving(true);
       const values = form.values;
       await updateMember(memberId, values);
-      message: '会员数据已更新';
+      message.success('会员数据已更新');
       setMode('view');
       onSaved?.();
     } catch (e: unknown) {
@@ -184,7 +184,7 @@ const DynamicRenderer: React.FC<DynamicRendererProps> = ({
         <FormProvider form={form}>
           <FormLayout labelCol={4} wrapperCol={16}>
             {effectiveSchema && (
-              <SchemaField schema={effectiveSchema} />
+              <SchemaField schema={effectiveSchema as any} />
             )}
           </FormLayout>
 
@@ -213,7 +213,7 @@ const DynamicRenderer: React.FC<DynamicRendererProps> = ({
             children: (
               <FormProvider form={form}>
                 <FormLayout labelCol={4} wrapperCol={16}>
-                  <SchemaField schema={{ type: 'object', properties: deprecatedFields }} />
+                  <SchemaField schema={{ type: 'object', properties: deprecatedFields } as any} />
                 </FormLayout>
               </FormProvider>
             ),

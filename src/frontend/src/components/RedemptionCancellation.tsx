@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import axios from 'axios';
-import { Button, Card, InputNumber, Select, message, Result, Descriptions, Tag, Divider, Spin, Typography } from 'antd';
-import { RollbackOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { Button, Card, InputNumber, Select, message, Result, Descriptions, Tag, Spin, Typography } from 'antd';
+import { RollbackOutlined } from '@ant-design/icons';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const { Text } = Typography;
 
@@ -14,7 +15,7 @@ interface CancellationResult {
 }
 
 const RedemptionCancellation: React.FC = () => {
-  const [programCode] = useState(sessionStorage.getItem('current_program_code') || 'PROG001');
+  const programCode = useAppStore(s => s.currentProgramCode);
   const [redemptionTxId, setRedemptionTxId] = useState<number | null>(null);
   const [graceDays, setGraceDays] = useState(7);
   const [loading, setLoading] = useState(false);
@@ -25,9 +26,9 @@ const RedemptionCancellation: React.FC = () => {
     if (!redemptionTxId) { message.warning('请输入核销流水 ID'); return; }
     setLoading(true); setError(null); setResult(null);
     try {
-      const { data } = await axios.post(`/api/admin/redemption/${redemptionTxId}/cancel`, {
+      const { data } = await api.post(`/admin/redemption/${redemptionTxId}/cancel`, {
         grace_days: graceDays,
-      }, { headers: { 'X-Program-Code': programCode } });
+      });
       if (data.code === 'SUCCESS') {
         setResult(data.data);
         message.success('取消兑换处理完成');
@@ -39,7 +40,7 @@ const RedemptionCancellation: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [redemptionTxId, graceDays, programCode]);
+  }, [redemptionTxId, graceDays]);
 
   return (
     <Card title={<span><RollbackOutlined /> 退换货积分还原</span>} style={{ maxWidth: 700, margin: 24 }}>
@@ -72,11 +73,7 @@ const RedemptionCancellation: React.FC = () => {
       {loading && <Spin style={{ display: 'block', marginTop: 16 }} />}
 
       {result && (
-        <Result
-          status="success"
-          title="积分还原完成"
-          style={{ marginTop: 16 }}
-        >
+        <Result status="success" title="积分还原完成" style={{ marginTop: 16 }}>
           <Descriptions bordered size="small" column={2}>
             <Descriptions.Item label="恢复批次">{result.restored_count}</Descriptions.Item>
             <Descriptions.Item label="过期拦截">{result.expired_count}</Descriptions.Item>

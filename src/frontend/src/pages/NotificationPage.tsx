@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Tag, Card, Select, Button, Space, message, Popconfirm } from 'antd';
+import { Table, Tag, Card, Select, Button, Space, message } from 'antd';
 import { ReloadOutlined, BellOutlined, SendOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const NotificationPage: React.FC = () => {
   const [items, setItems] = useState<any[]>([]);
@@ -13,19 +12,23 @@ const NotificationPage: React.FC = () => {
   const fetch = async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get('/api/admin/notifications', {
+      const { data } = await api.get('/admin/notifications', {
         params: { status: filter === 'ALL' ? undefined : filter },
-        headers: { 'X-Program-Code': PROG },
       });
       setItems(data?.data || []);
-    } catch { setItems([]); } finally { setLoading(false); }
+    } catch (e) {
+      console.error('[NotificationPage] 加载失败:', e);
+      setItems([]);
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { fetch(); }, [filter]);
 
   const handleRetry = async (id: number) => {
-    await axios.post(`/api/admin/notifications/${id}/retry`, {}, { headers: { 'X-Program-Code': PROG } });
-    message.success('已重试'); fetch();
+    try {
+      await api.post(`/admin/notifications/${id}/retry`);
+      message.success('已重试'); fetch();
+    } catch (e: any) { message.error(e.response?.data?.message || '重试失败'); }
   };
 
   const statusColor: Record<string, string> = { PENDING: 'blue', SENDING: 'processing', SENT: 'green', RETRY: 'orange', FAILED: 'red', DEAD: '#666' };

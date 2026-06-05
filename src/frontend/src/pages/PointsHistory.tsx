@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { Table, Input, Select, Space, Tag, InputNumber, Card } from 'antd';
 import { SearchOutlined, HistoryOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const PointsHistory: React.FC = () => {
   const [txs, setTxs] = useState<any[]>([]);
@@ -14,9 +13,8 @@ const PointsHistory: React.FC = () => {
     if (!memberId) return;
     setLoading(true);
     try {
-      const { data } = await axios.get(`/api/admin/points/transactions`, {
+      const { data } = await api.get('/admin/points/transactions', {
         params: { member_id: memberId },
-        headers: { 'X-Program-Code': PROG },
       });
       setTxs(data?.data || []);
     } catch { setTxs([]); }

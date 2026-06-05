@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Card, Form, Input, InputNumber, Button, Table, Tag, message, Space, Popconfirm } from 'antd';
-import { PlusOutlined, DeleteOutlined, SaveOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
+import { Card, Form, Input, Button, Table, Tag, message, Space } from 'antd';
+import { PlusOutlined, SaveOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const RuleManagement: React.FC = () => {
   const [rules, setRules] = useState<any[]>([]);
@@ -16,26 +15,31 @@ const RuleManagement: React.FC = () => {
   const fetchRules = async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get('/api/admin/rules', { headers: { 'X-Program-Code': PROG } });
+      const { data } = await api.get('/admin/rules');
       setRules(data?.data || []);
-    } catch { setRules([]); } finally { setLoading(false); }
+    } catch (e) {
+      console.error('[RuleManagement] 加载失败:', e);
+      setRules([]);
+    } finally { setLoading(false); }
   };
 
   React.useEffect(() => { fetchRules(); }, []);
 
   const handleCreate = async (values: any) => {
-    await axios.post('/api/admin/rules', values, { headers: { 'X-Program-Code': PROG } });
-    message.success('规则已创建'); form.resetFields(); fetchRules();
+    try {
+      await api.post('/admin/rules', values);
+      message.success('规则已创建'); form.resetFields(); fetchRules();
+    } catch (e: any) { message.error(e.response?.data?.message || '创建失败'); }
   };
 
   const handleAiGenerate = async () => {
     if (!prompt.trim()) { message.warning('请输入规则描述'); return; }
     setAiLoading(true);
     try {
-      const { data } = await axios.post('/api/admin/rules/generate', { prompt }, { headers: { 'X-Program-Code': PROG } });
+      const { data } = await api.post('/ai/generate-rule', { prompt });
       setAiResult(data.data);
       message.success('AI 规则生成完成');
-    } catch (e: any) { message.error(e.message); }
+    } catch (e: any) { message.error(e.message || 'AI 生成失败'); }
     finally { setAiLoading(false); }
   };
 

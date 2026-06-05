@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Table, Tag, Button, Space, message, Select, Card, Statistic, Row, Col } from 'antd';
 import { ReloadOutlined, PlayCircleOutlined, InboxOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const statusColors: Record<string, string> = {
   RECEIVED: 'blue', VALIDATING: 'processing', VALIDATED: 'cyan', PROCESSING: 'geekblue',
@@ -21,14 +20,15 @@ const EventInbox: React.FC = () => {
   const fetch = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get('/api/admin/event-inbox', {
+      const { data } = await api.get('/admin/event-inbox', {
         params: { status: filter === 'ALL' ? undefined : filter },
-        headers: { 'X-Program-Code': PROG },
       });
       setEvents(data?.data?.events || []);
       setStats(data?.data?.stats || {});
-    } catch { setEvents([]); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error('[EventInbox] 加载失败:', e);
+      setEvents([]);
+    } finally { setLoading(false); }
   }, [filter]);
 
   useEffect(() => { fetch(); }, [fetch]);
@@ -39,14 +39,16 @@ const EventInbox: React.FC = () => {
   }, [autoRefresh, fetch]);
 
   const handleReplay = async (id: number) => {
-    await axios.post(`/api/admin/events/${id}/replay`, {}, { headers: { 'X-Program-Code': PROG } });
-    message.success('死信已重放');
-    fetch();
+    try {
+      await api.post(`/admin/events/${id}/replay`);
+      message.success('死信已重放');
+      fetch();
+    } catch (e: any) { message.error(e.response?.data?.message || '重放失败'); }
   };
 
   const handleBatchReplay = async () => {
     for (const id of selectedIds) {
-      await axios.post(`/api/admin/events/${id}/replay`, {}, { headers: { 'X-Program-Code': PROG } });
+      await api.post(`/admin/events/${id}/replay`).catch(() => {});
     }
     message.success(`${selectedIds.length} 个事件已重放`);
     setSelectedIds([]); fetch();

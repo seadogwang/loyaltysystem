@@ -22,5 +22,7 @@ Thumbs.db
 .env.local
 application-local.yml
 
-# Claude
-.claude/
+# DrawDB (self-hosted, cloned from github.com/drawdb-io/drawdb)
+drawdb/
+!drawdb/package.json
+!drawdb/vite.config.js

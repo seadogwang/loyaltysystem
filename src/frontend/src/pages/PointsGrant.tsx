@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Card, Form, Input, InputNumber, Select, Button, message, Alert, Descriptions } from 'antd';
 import { DollarOutlined, SendOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const PointsGrant: React.FC = () => {
+  const PROG = useAppStore(s => s.currentProgramCode);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [form] = Form.useForm();
@@ -13,12 +13,12 @@ const PointsGrant: React.FC = () => {
   const handleGrant = async (values: any) => {
     setLoading(true);
     try {
-      const { data } = await axios.post('/api/admin/points/grant', {
+      const { data } = await api.post('/admin/points/grant', {
         member_id: values.member_id,
         account_type: values.account_type,
         points: values.points,
         rule_code: values.rule_code || 'MANUAL_GRANT',
-      }, { headers: { 'X-Program-Code': PROG, 'X-Idempotency-Key': `grant-${Date.now()}` } });
+      }, { headers: { 'X-Idempotency-Key': `grant-${Date.now()}` } });
       if (data.code === 'SUCCESS') {
         message.success(`成功发放 ${values.points} 积分`);
         setResult(data.data);

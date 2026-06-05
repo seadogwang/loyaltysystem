@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Input, Space, Tag, message, Modal, Form, Select, InputNumber, Popconfirm } from 'antd';
 import { PlusOutlined, SearchOutlined, EditOutlined, MergeCellsOutlined, StopOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const MemberList: React.FC = () => {
+  const PROG = useAppStore(s => s.currentProgramCode);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -17,11 +17,10 @@ const MemberList: React.FC = () => {
   const fetchMembers = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(`/api/members/search?q=${search}`, {
-        headers: { 'X-Program-Code': PROG },
-      });
+      const { data } = await api.get(`/members/search?q=${search}`);
       setMembers(data?.data || []);
-    } catch {
+    } catch (e: any) {
+      console.error('[MemberList] 加载失败:', e);
       setMembers([]);
     } finally { setLoading(false); }
   }, [search]);
@@ -29,19 +28,23 @@ const MemberList: React.FC = () => {
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
   const handleCreate = async (values: any) => {
-    await axios.post('/api/members', {
-      member_id: Date.now(),
-      tier_code: values.tier_code || 'BASE',
-      ext_attributes: values.ext_attributes ? JSON.parse(values.ext_attributes) : {},
-    }, { headers: { 'X-Program-Code': PROG, 'X-Idempotency-Key': `create-${Date.now()}` } });
-    message.success('会员创建成功');
-    setCreateOpen(false); form.resetFields(); fetchMembers();
+    try {
+      await api.post('/members', {
+        member_id: Date.now(),
+        tier_code: values.tier_code || 'BASE',
+        ext_attributes: values.ext_attributes ? JSON.parse(values.ext_attributes) : {},
+      }, { headers: { 'X-Idempotency-Key': `create-${Date.now()}` } });
+      message.success('会员创建成功');
+      setCreateOpen(false); form.resetFields(); fetchMembers();
+    } catch (e: any) { message.error(e.response?.data?.message || '创建失败'); }
   };
 
   const handleDeactivate = async (memberId: number) => {
-    await axios.put(`/api/members/${memberId}/deactivate`, {}, { headers: { 'X-Program-Code': PROG } });
-    message.success('会员已禁用');
-    fetchMembers();
+    try {
+      await api.put(`/members/${memberId}/deactivate`);
+      message.success('会员已禁用');
+      fetchMembers();
+    } catch (e: any) { message.error(e.response?.data?.message || '操作失败'); }
   };
 
   const columns = [

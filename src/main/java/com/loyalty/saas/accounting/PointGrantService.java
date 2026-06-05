@@ -5,8 +5,10 @@ import com.loyalty.saas.common.event.EventBridge;
 import com.loyalty.saas.common.exception.BusinessException;
 import com.loyalty.saas.domain.entity.AccountTransaction;
 import com.loyalty.saas.domain.entity.MemberAccount;
+import com.loyalty.saas.domain.entity.PointTypeDefinition;
 import com.loyalty.saas.domain.repository.AccountTransactionRepository;
 import com.loyalty.saas.domain.repository.MemberAccountRepository;
+import com.loyalty.saas.domain.repository.PointTypeDefinitionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,15 +67,18 @@ public class PointGrantService {
     private final MemberAccountRepository accountRepo;
     private final AccountTransactionRepository txRepo;
     private final EventBridge eventBridge;
+    private final PointTypeDefinitionRepository pointTypeRepo;
 
     /** BigDecimal 精度：4 位小数，四舍五入 */
     private static final int SCALE = 4;
 
     public PointGrantService(MemberAccountRepository accountRepo,
                              AccountTransactionRepository txRepo,
+                             PointTypeDefinitionRepository pointTypeRepo,
                              @Autowired(required = false) EventBridge eventBridge) {
         this.accountRepo = accountRepo;
         this.txRepo = txRepo;
+        this.pointTypeRepo = pointTypeRepo;
         this.eventBridge = eventBridge;
     }
 
@@ -144,27 +149,33 @@ public class PointGrantService {
                     debt, offsetAmount, newOverdraft, remainingToGrant);
         }
 
-        // ==================== Step 2: 还信用——偿还主动信用欠款 ====================
-        if (remainingToGrant.compareTo(BigDecimal.ZERO) > 0
-                && account.getCreditUsed().compareTo(BigDecimal.ZERO) > 0) {
+        // ==================== Step 2: 跨账户还信用——用当前资产偿还 CREDIT 账户欠款 ====================
+        // 设计文档 4.2.2: 信用欠款记录在独立的 CREDIT 账户上，需跨账户查询
+        if (remainingToGrant.compareTo(BigDecimal.ZERO) > 0) {
+            MemberAccount creditAccount = accountRepo.findByMemberIdAndTypeForUpdate(
+                    programCode, memberId, "CREDIT").orElse(null);
 
-            BigDecimal creditDebt = account.getCreditUsed();
-            BigDecimal offsetAmount = remainingToGrant.min(creditDebt);
+            if (creditAccount != null && creditAccount.getCreditUsed().compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal creditDebt = creditAccount.getCreditUsed();
+                BigDecimal offsetAmount = remainingToGrant.min(creditDebt);
 
-            insertTransaction(programCode, memberId, accountType, accountId, "CREDIT_REPAY",
-                    offsetAmount, null, ruleCode, null);
+                // 在 CREDIT 账户生成 CREDIT_REPAY 流水（正向入账，偿还信用）
+                insertTransaction(programCode, memberId, "CREDIT", creditAccount.getAccountId(),
+                        "CREDIT_REPAY", offsetAmount, null, ruleCode, null);
 
-            // 扣减信用已用额度（乐观锁 version 保护）
-            account.setCreditUsed(account.getCreditUsed().subtract(offsetAmount));
+                // 扣减 CREDIT 账户的信用已用额度（乐观锁 version 保护）
+                creditAccount.setCreditUsed(creditAccount.getCreditUsed().subtract(offsetAmount));
+                accountRepo.save(creditAccount);
 
-            remainingToGrant = remainingToGrant.subtract(offsetAmount);
-            log.debug("[Grant] 信用还款: debt={}, offset={}, creditUsedLeft={}, grantLeft={}",
-                    creditDebt, offsetAmount, account.getCreditUsed(), remainingToGrant);
+                remainingToGrant = remainingToGrant.subtract(offsetAmount);
+                log.debug("[Grant] 跨账户信用还款: creditDebt={}, offset={}, creditUsedLeft={}, grantLeft={}",
+                        creditDebt, offsetAmount, creditAccount.getCreditUsed(), remainingToGrant);
+            }
         }
 
         // ==================== Step 3: 真实入账——生成 ACCRUAL 正向批次 ====================
         if (remainingToGrant.compareTo(BigDecimal.ZERO) > 0) {
-            LocalDateTime expiry = calculateExpiryDate();
+            LocalDateTime expiry = calculateExpiryDate(programCode, accountType);
             insertTransaction(programCode, memberId, accountType, accountId, "ACCRUAL",
                     remainingToGrant, expiry, ruleCode, null);
             log.debug("[Grant] ACCRUAL 入账: amount={}, expiresAt={}", remainingToGrant, expiry);
@@ -215,7 +226,91 @@ public class PointGrantService {
     /**
      * 计算积分过期时间（默认 365 天，从 Program 配置读取）。
      */
-    private LocalDateTime calculateExpiryDate() {
-        return LocalDateTime.now().plusDays(365);
+    /**
+     * 计算积分过期时间，根据积分类型配置的过期模式和值。
+     *
+     * <p>支持三种过期模式：
+     * <ul>
+     *   <li>{@code FIXED_DAYS}：从当前时间起 + N 天</li>
+     *   <li>{@code CALENDAR_MONTHS}：N 个完整自然月后的月末最后一天<br>
+     *       例如：5月 + 12个月 = 次年6月30日</li>
+     *   <li>{@code CALENDAR_YEARS}：N 个完整自然年后的年末最后一天<br>
+     *       例如：2025年 + 1年 = 2026年12月31日</li>
+     * </ul>
+     * 如果值为 0，表示永不过期，返回 null。
+     */
+    private LocalDateTime calculateExpiryDate(String programCode, String accountType) {
+        // 查找积分类型配置
+        PointTypeDefinition pt = pointTypeRepo
+                .findByProgramCodeAndTypeCode(programCode, accountType)
+                .orElse(null);
+
+        String expiryMode = (pt != null && pt.getExpiryMode() != null) ? pt.getExpiryMode() : "FIXED_DAYS";
+        Integer expiryValue = (pt != null && pt.getExpiryValue() != null) ? pt.getExpiryValue() : 365;
+
+        // 值为 0 表示永不过期
+        if (expiryValue == 0) {
+            log.debug("[Grant] 积分永不过期: type={}", accountType);
+            return null;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        switch (expiryMode) {
+            case "CALENDAR_MONTHS":
+                // N 个完整自然月后，月末最后一天
+                LocalDateTime monthEnd = now.plusMonths(expiryValue);
+                monthEnd = monthEnd.withDayOfMonth(monthEnd.toLocalDate().lengthOfMonth());
+                monthEnd = monthEnd.withHour(23).withMinute(59).withSecond(59);
+                log.debug("[Grant] 自然月过期: type={}, months={}, expiresAt={}", accountType, expiryValue, monthEnd);
+                return monthEnd;
+
+            case "CALENDAR_YEARS":
+                // N 个完整自然年后，年末最后一天
+                LocalDateTime yearEnd = now.plusYears(expiryValue);
+                yearEnd = yearEnd.withMonth(12).withDayOfMonth(31);
+                yearEnd = yearEnd.withHour(23).withMinute(59).withSecond(59);
+                log.debug("[Grant] 自然年过期: type={}, years={}, expiresAt={}", accountType, expiryValue, yearEnd);
+                return yearEnd;
+
+            case "FIXED_DAYS":
+            default:
+                LocalDateTime fixed = now.plusDays(expiryValue);
+                log.debug("[Grant] 固定天数过期: type={}, days={}, expiresAt={}", accountType, expiryValue, fixed);
+                return fixed;
+        }
+    }
+
+    /**
+     * 授信额度授予 — 设计文档 4.4。
+     * 不通过发分流水，直接修改 CREDIT 账户的 credit_limit。
+     * 若用户尚无 CREDIT 账户则自动创建。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void setCreditLimit(String programCode, Long memberId, BigDecimal newLimit) {
+        if (newLimit == null || newLimit.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("ERR_INVALID_CREDIT", "授信额度不能为负数");
+        }
+        MemberAccount creditAccount = accountRepo.findByMemberIdAndTypeForUpdate(
+                programCode, memberId, "CREDIT").orElse(null);
+
+        if (creditAccount == null) {
+            creditAccount = MemberAccount.builder()
+                    .programCode(programCode)
+                    .memberId(memberId)
+                    .accountType("CREDIT")
+                    .balance(BigDecimal.ZERO)
+                    .creditLimit(BigDecimal.ZERO)
+                    .creditUsed(BigDecimal.ZERO)
+                    .overdraftLimit(BigDecimal.ZERO)
+                    .totalAccrued(BigDecimal.ZERO)
+                    .totalRedeemed(BigDecimal.ZERO)
+                    .totalExpired(BigDecimal.ZERO)
+                    .build();
+            creditAccount = accountRepo.save(creditAccount);
+            log.info("[Credit] CREDIT 账户已创建: member={}, accountId={}", memberId, creditAccount.getAccountId());
+        }
+        creditAccount.setCreditLimit(newLimit);
+        accountRepo.save(creditAccount);
+        log.info("[Credit] 授信额度已设置: member={}, creditLimit={}", memberId, newLimit);
     }
 }

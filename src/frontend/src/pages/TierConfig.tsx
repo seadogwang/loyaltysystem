@@ -1,25 +1,29 @@
 import React from 'react';
-import { Card, Table, Tag, InputNumber, Input, Button, message, Space } from 'antd';
-import { PlusOutlined, SaveOutlined, CrownOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
-
-const defaultTiers = [
-  { tier_code: 'BASE', tier_name: '普通会员', sequence: 1, min_points: 0, max_points: 1000 },
-  { tier_code: 'SILVER', tier_name: '银卡会员', sequence: 2, min_points: 1000, max_points: 5000 },
-  { tier_code: 'GOLD', tier_name: '金卡会员', sequence: 3, min_points: 5000, max_points: 10000 },
-  { tier_code: 'PLATINUM', tier_name: '铂金会员', sequence: 4, min_points: 10000, max_points: 9999999 },
-];
+import { Card, Table, InputNumber, Input, Button, message, Space } from 'antd';
+import { SaveOutlined, CrownOutlined } from '@ant-design/icons';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const TierConfig: React.FC = () => {
+  const PROG = useAppStore(s => s.currentProgramCode);
+
+  const defaultTiers = [
+    { tier_code: 'BASE', tier_name: '普通会员', sequence: 1, min_points: 0, max_points: 1000 },
+    { tier_code: 'SILVER', tier_name: '银卡会员', sequence: 2, min_points: 1000, max_points: 5000 },
+    { tier_code: 'GOLD', tier_name: '金卡会员', sequence: 3, min_points: 5000, max_points: 10000 },
+    { tier_code: 'PLATINUM', tier_name: '铂金会员', sequence: 4, min_points: 10000, max_points: 9999999 },
+  ];
+
   const [tiers, setTiers] = React.useState(defaultTiers);
 
   const handleSave = async () => {
     try {
-      await axios.put('/api/admin/tiers', { tiers }, { headers: { 'X-Program-Code': PROG } });
+      await api.put('/admin/tiers', { tiers });
       message.success('等级配置已保存');
-    } catch { message.error('保存失败'); }
+    } catch (e: any) {
+      console.error('[TierConfig] 保存失败:', e);
+      message.error('保存失败');
+    }
   };
 
   const updateField = (idx: number, field: string, value: any) => {

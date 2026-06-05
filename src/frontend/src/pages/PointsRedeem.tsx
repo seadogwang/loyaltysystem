@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Card, Form, InputNumber, Select, Button, message, Alert, Descriptions } from 'antd';
 import { ThunderboltOutlined, SendOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const PointsRedeem: React.FC = () => {
+  const PROG = useAppStore(s => s.currentProgramCode);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [form] = Form.useForm();
@@ -13,9 +13,9 @@ const PointsRedeem: React.FC = () => {
   const handleRedeem = async (values: any) => {
     setLoading(true);
     try {
-      const { data } = await axios.post('/api/admin/points/redeem', {
+      const { data } = await api.post('/admin/points/redeem', {
         member_id: values.member_id, account_type: values.account_type, points: values.points,
-      }, { headers: { 'X-Program-Code': PROG, 'X-Idempotency-Key': `redeem-${Date.now()}` } });
+      }, { headers: { 'X-Idempotency-Key': `redeem-${Date.now()}` } });
       if (data.code === 'SUCCESS') { message.success(`成功核销 ${values.points} 积分`); setResult(data.data); }
       else message.error(data.message);
     } catch (e: any) { message.error(e.response?.data?.message || '核销失败'); }

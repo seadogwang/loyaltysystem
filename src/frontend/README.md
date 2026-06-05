@@ -27,4 +27,9 @@
  * 
  * 启动: cd src/frontend && npm install && npm run dev
  * 构建: cd src/frontend && npm run build
+ *
+ * DrawDB 自托管:
+ *   cd drawdb && npm install && npm run dev    # DrawDB 启动在 localhost:5174
+ *   cd src/frontend && npm run dev              # 前端启动在 localhost:5173
+ *   Vite 自动将 /drawdb 代理到 DrawDB dev server
  */

@@ -27,6 +27,7 @@ export interface JsonSchema {
   type: 'object';
   properties: Record<string, FieldSchema>;
   required?: string[];
+  version?: string;
 }
 
 /** 组件注册表项 */

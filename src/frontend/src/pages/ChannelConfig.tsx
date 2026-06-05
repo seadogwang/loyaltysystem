@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Tag, Button, message, Modal, Form, Input, Select } from 'antd';
-import { PlusOutlined, EditOutlined, ApiOutlined } from '@ant-design/icons';
-import axios from 'axios';
-
-const PROG = sessionStorage.getItem('current_program_code') || 'PROG001';
+import { PlusOutlined, ApiOutlined } from '@ant-design/icons';
+import { useAppStore } from '../store';
+import api from '../api';
 
 const ChannelConfig: React.FC = () => {
   const [channels, setChannels] = useState<any[]>([]);
@@ -14,16 +13,21 @@ const ChannelConfig: React.FC = () => {
   const fetch = async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get('/api/admin/channels', { headers: { 'X-Program-Code': PROG } });
+      const { data } = await api.get('/admin/channels');
       setChannels(data?.data || []);
-    } catch { setChannels([]); } finally { setLoading(false); }
+    } catch (e) {
+      console.error('[ChannelConfig] 加载失败:', e);
+      setChannels([]);
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { fetch(); }, []);
 
   const handleSave = async (values: any) => {
-    await axios.put('/api/admin/channels', values, { headers: { 'X-Program-Code': PROG } });
-    message.success('渠道配置已保存'); setOpen(false); form.resetFields(); fetch();
+    try {
+      await api.put('/admin/channels', values);
+      message.success('渠道配置已保存'); setOpen(false); form.resetFields(); fetch();
+    } catch (e: any) { message.error(e.response?.data?.message || '保存失败'); }
   };
 
   const columns = [

@@ -81,7 +81,7 @@ const DraggableFieldItem: React.FC<{ entry: ComponentRegistryEntry }> = ({ entry
       ref={dragRef}
       style={{
         padding: '6px 12px', marginBottom: 4, borderRadius: 4,
-        background: isDragging ? '#e6f7ff' : '#f5f5f5',
+        background: isDragging ? '#e6f7ff' : '#fff',
         cursor: 'grab', opacity: isDragging ? 0.5 : 1,
         display: 'flex', alignItems: 'center', gap: 8,
         border: '1px solid #d9d9d9',
@@ -140,7 +140,7 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({ schema, onChange }) => {
       ref={dropRef}
       style={{
         minHeight: 400, padding: 16, borderRadius: 8,
-        background: isOver ? '#f0f5ff' : '#fafafa',
+        background: isOver ? '#f0f5ff' : '#fff',
         border: `2px dashed ${isOver ? '#1677ff' : '#d9d9d9'}`,
       }}
     >
@@ -178,7 +178,7 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({ schema, onChange }) => {
           </div>
 
           {editingKey === key && (
-            <div style={{ marginTop: 12, padding: 12, background: '#fafafa', borderRadius: 4 }}>
+            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 4, border: '1px solid #f0f0f0' }}>
               <Form layout="vertical" size="small">
                 <Form.Item label="字段标题">
                   <Input value={field.title} onChange={(e) => updateField(key, { title: e.target.value })} />
@@ -209,28 +209,43 @@ export interface SchemaBuilderProps {
   onPublished?: () => void;
 }
 
+const DEFAULT_ENTITIES = [
+  { key: 'MEMBER', label: '会员' },
+  { key: 'TRANSACTION', label: '交易' },
+];
+
 const SchemaBuilder: React.FC<SchemaBuilderProps> = ({ entityType = 'MEMBER', onPublished }) => {
-  const [schema, setSchema] = useState<JsonSchema>({ type: 'object', properties: {} });
+  const [activeEntity, setActiveEntity] = useState(entityType);
+  const [entities, setEntities] = useState<string[]>([...DEFAULT_ENTITIES.map(e => e.key)]);
+  const [schemas, setSchemas] = useState<Record<string, JsonSchema>>({});
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [published, setPublished] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [loadingSchema, setLoadingSchema] = useState(true);
+  const [newEntityName, setNewEntityName] = useState('');
+  const [showAddEntity, setShowAddEntity] = useState(false);
 
-  // 加载当前生效的 Schema
+  const schema = schemas[activeEntity] || ({ type: 'object' as const, properties: {} } as JsonSchema);
+
+  // 加载 Schema
   useEffect(() => {
-    getSchema(entityType).then(data => {
+    setLoadingSchema(true);
+    getSchema(activeEntity).then(data => {
       if (data?.schema) {
-        setSchema(data.schema);
+        setSchemas(prev => ({ ...prev, [activeEntity]: data.schema }));
         setCurrentVersion(data.version);
       }
-    }).catch(() => {}).finally(() => setLoadingSchema(false));
-  }, [entityType]);
+    }).catch(() => {
+      // API 不可用时使用空 schema
+      setSchemas(prev => prev[activeEntity] ? prev : { ...prev, [activeEntity]: { type: 'object' as const, properties: {} } });
+    }).finally(() => setLoadingSchema(false));
+  }, [activeEntity]);
 
   const handlePublish = useCallback(async () => {
     setSaving(true);
     try {
-      await saveSchema(entityType, schema);
+      await saveSchema(activeEntity, schemas[activeEntity]);
       setPublished(true);
       setCurrentVersion(`v${Date.now()}`);
       message.success('Schema 已保存并发布！');
@@ -242,11 +257,57 @@ const SchemaBuilder: React.FC<SchemaBuilderProps> = ({ entityType = 'MEMBER', on
     }
   }, [schema, entityType, onPublished]);
 
-  const fieldCount = Object.keys(schema.properties).length;
-  const deprecatedCount = Object.values(schema.properties).filter(f => f.deprecated).length;
+  const fieldCount = Object.keys(schema.properties || {}).length;
+  const deprecatedCount = Object.values(schema.properties || {}).filter((f: any) => f.deprecated).length;
 
   return (
     <>
+      {/* ====== 实体选择器 ====== */}
+      <div style={{ padding: '12px 16px 0 16px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>实体:</Text>
+        {entities.map(e => (
+          <Tag key={e}
+            color={activeEntity === e ? 'blue' : 'default'}
+            style={{ cursor: 'pointer' }}
+            onClick={() => { setActiveEntity(e); setPublished(false); }}>
+            {DEFAULT_ENTITIES.find(d => d.key === e)?.label || e}
+          </Tag>
+        ))}
+        {showAddEntity ? (
+          <Input
+            size="small"
+            placeholder="新实体名"
+            value={newEntityName}
+            onChange={e => setNewEntityName(e.target.value)}
+            onBlur={() => {
+              if (newEntityName.trim()) {
+                const name = newEntityName.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+                setEntities(prev => [...prev, name]);
+                setSchemas(prev => ({ ...prev, [name]: { type: 'object', properties: {} } }));
+                setActiveEntity(name);
+              }
+              setNewEntityName('');
+              setShowAddEntity(false);
+            }}
+            onPressEnter={() => {
+              if (newEntityName.trim()) {
+                const name = newEntityName.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+                setEntities(prev => [...prev, name]);
+                setSchemas(prev => ({ ...prev, [name]: { type: 'object', properties: {} } }));
+                setActiveEntity(name);
+              }
+              setNewEntityName('');
+              setShowAddEntity(false);
+            }}
+            autoFocus
+            style={{ width: 120 }}
+          />
+        ) : (
+          <Tag style={{ cursor: 'pointer', borderStyle: 'dashed' }}
+            onClick={() => setShowAddEntity(true)}>+ 添加实体</Tag>
+        )}
+      </div>
+
       {/* ====== 顶部操作流程指引 ====== */}
       <div style={{ padding: '16px 16px 0 16px' }}>
         <Card size="small" style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}>
@@ -306,7 +367,7 @@ const SchemaBuilder: React.FC<SchemaBuilderProps> = ({ entityType = 'MEMBER', on
                 {JSON.stringify(schema, null, 2)}
               </pre>
             ) : (
-              <DesignCanvas schema={schema} onChange={setSchema} />
+              <DesignCanvas schema={schema} onChange={(s) => setSchemas(prev => ({ ...prev, [activeEntity]: s }))} />
             )}
           </Card>
 
