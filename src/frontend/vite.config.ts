@@ -11,12 +11,6 @@ export default defineConfig({
         target: 'http://localhost:8090',
         changeOrigin: true,
       },
-      // DrawDB 自托管：开发时代理到 DrawDB dev server (端口 5174)
-      '/drawdb': {
-        target: 'http://localhost:5174',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/drawdb/, ''),
-      },
     },
   },
   resolve: {
