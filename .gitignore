@@ -26,3 +26,7 @@ application-local.yml
 drawdb/
 !drawdb/package.json
 !drawdb/vite.config.js
+
+# Frontend
+src/frontend/node_modules/
+src/frontend/dist/
