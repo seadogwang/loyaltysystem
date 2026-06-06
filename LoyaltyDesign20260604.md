@@ -104,7 +104,8 @@ public class KafkaEventBus implements EventBridge {
 * **数据持久层**：PostgreSQL 15（深度使用 JSONB + GIN 索引），Spring Data JPA 或 MyBatis-Plus
 * **缓存与分布锁**：Redis 6.x + Redisson
 * **前端框架**：React 18 + TypeScript + Vite + Ant Design 5 + Formily 2.x
-* **画布引擎**：ChartDB（开源 React 组件）
+* **画布引擎**：React Flow（节点+连线可视化）
+* **Schema 编辑**：JsonSea（树形 JSON Schema 编辑器）
 * **状态管理**：Zustand
 * **样式方案**：纯白底色 + 黑线条风格，自定义 SVG 图标
 ***
@@ -117,8 +118,20 @@ public class KafkaEventBus implements EventBridge {
 平台对核心实体采取"**核心强依赖字段 + 动态扩展字段 (JSONB)**"的双轨模型。
 **研发与 AI 编码纪律**：严禁随意在数据库表和 Java Entity 中增加业务字段。
 #### 3.2.1 会员实体边界 (Member)
-* **静态字段**（系统路由和核心引擎强依赖）：`id`、`program_code`、`member_id`（雪花算法生成）、`status`、`tier_code`、`schema_version`、`created_at`
-* **动态字段**：`ext_attributes`（PostgreSQL JSONB），前端采用 Formily 配合 JSON Schema 动态渲染
+#### 3.2.1 会员实体边界 (Member)
+* **静态字段**（系统路由和核心引擎强依赖）：
+  * `id`：底层自增主键
+  * `program_code`：归属计划
+  * `member_id`：业务主键，One-ID（雪花算法生成）
+  * `name`：姓名（通用属性，非唯一标识）
+  * `gender`：性别（字典：MALE / FEMALE / UNKNOWN）
+  * `birthday`：生日（通用属性，非唯一标识）
+  * `status`：ENROLLED / SUSPENDED / MERGED / DEACTIVATED
+  * `tier_code`：当前等级代码
+  * `schema_version`：Schema 版本号
+  * `created_at`：注册时间
+* **动态字段**：`ext_attributes`（JSONB），存储渠道特有属性（如天猫昵称、抖音头像等）
+* **设计原则**：明文手机不在 member 表中，所有标识类信息统一通过 member_unique_key 管理
 ```java
 @Entity
 @Table(name = "member")
@@ -133,6 +146,12 @@ public class Member {
     @Column(name = "tier_code")
     private String tierCode;
     @Column(name = "status", nullable = false)
+    @Column(name = "name")
+    private String name;
+    @Column(name = "gender")
+    private String gender;
+    @Column(name = "birthday")
+    private LocalDate birthday;
     private String status;
     @Column(name = "schema_version")
     private String schemaVersion;
@@ -144,13 +163,20 @@ public class Member {
 }
 ```
 #### 3.2.2 交易事件边界 (TransactionEvent)
-* **静态字段**：`event_id`、`member_id`、`event_type`（ORDER/ENROLL/CUSTOM）、`channel`、`event_time`、`idempotent_key`
-* **动态字段**：`payload`（JSONB，存储 order_amount、pay_type 等扩展数据）
+* **静态字段**：`event_id`, `member_id`, `event_type`, `channel`, `event_time`, `idempotent_key`
+* **event_type 枚举**：
+  * `ORDER`：订单交易
+  * `BEHAVIOR`：行为事件（浏览、分享、签到等）
+  * `REDEMPTION`：兑礼交易
+  * `CUSTOM`：自定义事件（预留扩展）
+* **动态字段**：不同类型交易的差异字段统一存入 `payload` JSONB
 #### 3.2.3 动态属性写入规范（Schema 版本下沉）
 每次创建或更新会员的 ext_attributes 时，必须同步写入当前生效的 Schema 版本号：
 ```java
 public void saveMemberExtAttributes(String memberId, Map<String, Object> extAttributes) {
     Member member = memberRepo.findByMemberId(memberId);
+    @Autowired
+    private EventBridge eventBridge;
     String currentSchemaVersion = schemaService.getCurrentVersion(member.getProgramCode(), "MEMBER");
     // 双写：独立字段 + JSON 内部元字段
     extAttributes.put("_schema_version", currentSchemaVersion);
@@ -207,90 +233,138 @@ end
 ```
 ### 3.4 全渠道身份识别与会员合并
 #### 3.4.1 标识强度分级
-| 标识类型            | 强度    | 说明        |
-| --------------- | ----- | --------- |
-| 手机号（已验证）        | ★★★★★ | 核心强标识     |
-| 身份证号            | ★★★★★ | 极少场景可获取   |
-| 邮箱（已验证）         | ★★★★  | 跨渠道较高     |
-| UnionID（微信开放平台） | ★★★★  | 同一开放平台下唯一 |
-| OpenID（单个公众号）   | ★★    | 仅单应用内唯一   |
-| 设备 ID           | ★     | 仅辅助       |
+| 标识类型 | 强度 | 说明 |
+|----------|------|------|
+| 明文手机 MOBILE_PLAIN | ★★★★★ | **跨渠道最强标识**，POS线下或抖音验证后获得 |
+| 渠道唯一ID（ouid/pin/openId） | ★★★★ | 渠道内唯一，可自主精确匹配 |
+| 密文手机（TMALL_MOBILE_MD5等） | ★★ | 可通过相同算法加密明文后等价匹配 |
+| 掩码手机（DOUYIN_MOBILE_MASK） | ☆ | 不可匹配，仅存储备查 |
 #### 3.4.2 分层匹配流程
 ```text
 入会请求到达 → 提取所有可用标识
-  ↓
-第一层：强标识匹配（手机号/UnionID/邮箱）
-  → 命中？→ 绑定渠道，复用 member_id
-  → 未命中？→ 进入第二层
-  ↓
-第二层：弱标识匹配（OpenID/设备ID）
-  → 命中？→ 绑定渠道，复用 member_id
-  → 未命中？→ 创建新 member_id
+↓
+第一层：强标识精确匹配
+标识类型：MOBILE_PLAIN / TMALL_OUID / JD_PIN / WECHAT_OPENID / DOUYIN_OPENID
+→ 在 member_unique_key 中查询
+→ 命中 → 绑定渠道，复用 member_id
+→ 未命中 → 进入第二层
+↓
+第二层：密文等价匹配（仅限自有渠道）
+场景：POS 拿到明文手机，用相同算法加密后匹配 TMALL_MOBILE_MD5 / JD_MOBILE_ENCRYPT
+→ 命中 → 绑定，写入 MOBILE_PLAIN
+→ 未命中 → 进入第三层
+↓
+第三层：创建新 member_id
+→ 写入所有可用标识到 member_unique_key
+→ 对于抖音用户，标记为"待验证"状态
+↓
+异步补充验证（仅限抖音）：
+→ 用户下单时抖音返回完整手机号
+→ 写入 MOBILE_PLAIN
+→ 触发跨渠道匹配检查 → 自动合并
 ```
 #### 3.4.3 One-ID 建立的三个时机
-| 时机       | 触发条件                            | 行为                                 |
-| -------- | ------------------------------- | ---------------------------------- |
-| 入会时      | 请求包含强标识                         | 立即匹配，命中则复用，未命中则创建                  |
-| 绑定新标识时   | 已有 member_id 的用户新增渠道/手机号       | 写入 member_unique_key，若冲突触发合并     |
-| 更新强标识字段时 | 用户更新 ext_attributes 中标记为强标识的字段 | 异步检查 member_unique_key，若冲突生成合并任务 |
+| 时机 | 触发条件 | 行为 |
+|------|---------|------|
+| 入会时 | 请求包含强标识 | 立即匹配，命中则复用，未命中则创建 |
+| 绑定新标识时 | 已有 member_id 的用户新增渠道/手机号 | 写入 member_unique_key，若冲突触发合并 |
+| 抖音验证通过时 | 抖音下单返回完整手机号 | 写入 MOBILE_PLAIN，若冲突自动合并 |
 #### 3.4.4 辅助唯一键表
 ```sql
 CREATE TABLE member_unique_key (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGSERIAL,
     program_code VARCHAR(32) NOT NULL,
     key_type VARCHAR(32) NOT NULL,
-    key_value VARCHAR(128) NOT NULL,
+    key_value VARCHAR(256) NOT NULL,
     target_member_id VARCHAR(64) NOT NULL,
     is_strong BOOLEAN DEFAULT true,
+    is_verified BOOLEAN DEFAULT false,
     verified_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (program_code, key_type, key_value)
-);
+) PARTITION BY LIST (key_type);
 ```
+| key_type            | 示例值             | is_strong | 分区  | 匹配方式   |
+| -------------------- | --------------- | ---------- | --- | ------ |
+| `MOBILE_PLAIN`       | 13812345678     | ✅ true     | 热数据 | 精确匹配   |
+| `TMALL_OUID`         | tb123456        | ✅ true     | 温数据 | 精确匹配   |
+| `JD_PIN`             | jd_user_001   | ✅ true     | 温数据 | 精确匹配   |
+| `WECHAT_OPENID`      | oxc123...       | ✅ true     | 温数据 | 精确匹配   |
+| `DOUYIN_OPENID`      | dy123...        | ✅ true     | 温数据 | 精确匹配   |
+| `TMALL_MOBILE_MD5`   | md5...          | ❌ false    | 冷数据 | 加密等价匹配 |
+| `JD_MOBILE_ENCRYPT`  | enc...          | ❌ false    | 冷数据 | 加密等价匹配 |
+| `DOUYIN_MOBILE_MASK` | 138****5678 | ❌ false    | 冷数据 | 不可匹配   |
 #### 3.4.5 并发入会与合并策略
 ```java
 public void processEnrollment(EnrollmentRequest request) {
     String programCode = request.getProgramCode();
-    String mobile = decrypt(request.getMobile());
-    String lockKey = "loyalty:" + programCode + ":enroll:" + HashUtil.md5(mobile);
+    String channel = request.getChannel();       // TMALL / JD / WECHAT / DOUYIN / POS
+    String openId = request.getOpenId();          // 渠道唯一标识
+    String plainMobile = request.getPlainMobile(); // 明文手机（如有）
+    // 1. 统一锁 Key：基于 openId 哈希
+    String lockKey = "loyalty:" + programCode + ":enroll:" + HashUtil.md5(openId);
     RLock lock = redissonClient.getLock(lockKey);
     try {
         lock.lock(5, TimeUnit.SECONDS);
-        // 强标识匹配
-        Long existingMemberId = uniqueKeyRepo.findMemberId(programCode, "MOBILE", mobile);
+        // 2. 第一层：强标识精确匹配
+        Long existingMemberId = uniqueKeyRepo.findMemberId(programCode, channel, openId);
         if (existingMemberId != null) {
-            bindNewChannel(existingMemberId, request.getChannel(), request.getChannelOpenId());
+            // 如果有明文手机，补充绑定
+            if (plainMobile != null) {
+                bindMobilePlain(programCode, existingMemberId, plainMobile);
+            }
             return;
         }
-        // 弱标识匹配
-        existingMemberId = uniqueKeyRepo.findMemberId(programCode, request.getChannel(), request.getChannelOpenId());
-        if (existingMemberId != null) {
-            bindNewIdentifier(existingMemberId, "MOBILE", mobile);
-            return;
+        // 3. 第二层：如果有明文手机，尝试密文等价匹配
+        if (plainMobile != null) {
+            // 尝试匹配天猫密文
+            String tmallMd5 = DigestUtils.md5Hex(DigestUtils.md5Hex(plainMobile + tmallSalt));
+            Long tmallMemberId = uniqueKeyRepo.findMemberId(programCode, "TMALL_MOBILE_MD5", tmallMd5);
+            if (tmallMemberId != null) {
+                // 匹配成功，绑定新渠道 + 写入 MOBILE_PLAIN
+                bindNewChannel(tmallMemberId, channel, openId);
+                bindMobilePlain(programCode, tmallMemberId, plainMobile);
+                return;
+            }
+            // 同理尝试匹配京东密文...
         }
-        // 新会员注册
+        // 4. 第三层：创建新 member_id
         Long newMemberId = generateSnowflakeId();
-        Member newMember = new Member(programCode, newMemberId, request.getExtAttributes());
-        memberRepo.save(newMember);
-        try {
-            uniqueKeyRepo.save(new UniqueKey(programCode, "MOBILE", mobile, newMemberId, true));
-            uniqueKeyRepo.save(new UniqueKey(programCode, request.getChannel(), request.getChannelOpenId(), newMemberId, false));
-        } catch (DataIntegrityViolationException e) {
-            Long existingId = uniqueKeyRepo.findMemberId(programCode, "MOBILE", mobile);
-            bindNewChannel(existingId, request.getChannel(), request.getChannelOpenId());
-            memberRepo.deleteById(newMemberId);
-            return;
+        memberRepo.save(new Member(programCode, newMemberId));
+        uniqueKeyRepo.save(new UniqueKey(programCode, channel, openId, newMemberId, true));
+        // 如果有明文手机，也写入
+        if (plainMobile != null) {
+            bindMobilePlain(programCode, newMemberId, plainMobile);
         }
-        eventBridge.publish("loyalty-events", newMemberId.toString(), new MemberEnrolledEvent(newMemberId));
     } finally {
         lock.unlock();
     }
 }
 ```
-#### 3.4.6 显式合并与资产转移
-发现两个 `member_id` 属于同一个人时：
-* 选取主账号（注册早或等级高），另一个状态置为 `MERGED`
-* 积分资产累加，等级取最高
-* `member_unique_key` 记录全部重定向到主账号
+#### 3.4.6 数据库唯一约束兜底
+```java
+try {
+    uniqueKeyRepo.save(new UniqueKey(programCode, "MOBILE_PLAIN", mobile, memberId));
+} catch (DataIntegrityViolationException e) {
+    Long existingMemberId = uniqueKeyRepo.findMemberId(programCode, "MOBILE_PLAIN", mobile);
+    if (!existingMemberId.equals(memberId)) {
+        mergeMembers(programCode, existingMemberId, memberId);
+    }
+}
+```
+#### 3.4.7 隐式合并触发
+| 触发场景           | 检测方式                          | 合并条件                     |
+| -------------- | ----------------------------- | ------------------------ |
+| 抖音验证返回完整手机号    | 写入 `MOBILE_PLAIN` 时捕获唯一约束冲突   | 已有其他 member_id 绑定了同一手机号 |
+| POS 线下注册提供明文手机 | 同上                            | 同上                       |
+| 密文等价匹配成功       | 加密明文手机后匹配到 TMALL_MOBILE_MD5 | 匹配到其他 member_id         |
+| 用户补充手机号        | 写入 `MOBILE_PLAIN` 时捕获异常       | 同上                       |
+自动合并逻辑：
+1. 选取主账号（注册早或等级高者）
+2. 被合并账号状态置为 `MERGED`
+3. 所有 member_unique_key 记录重定向到主账号
+4. 积分资产累加，等级取最高
+5. 发布 MemberMergedEvent
 ***
 ## 第四章：积分、等级与资产隔离域
 ### 4.1 积分类型字典
@@ -477,6 +551,7 @@ CREATE TABLE redemption_allocation (
 * 当 `ACTIVE` 批次超过 50 条时，低峰期触发合并任务
 * 退款时通过 `redemption_allocation` 精准恢复原始批次的 `expires_at`
 ***
+
 ## 第五章：逆向交易与级联重算域
 ### 5.1 场景挑战
 退款导致"级联重算效应"：退单引发降级 → 后续积分获取比例全部失真。
@@ -689,6 +764,17 @@ public class SpiGatewayController {
     }
 }
 ```
+#### 7.2.3 抖音会员通特殊处理
+抖音会员通基于小程序实现，与天猫/京东的 Webhook 模式不同：
+- 用户标识通过小程序授权获取（openId + 掩码手机号）
+- 完整手机号需调用抖音验证接口（商家提供明文，抖音返回是否匹配）
+- `DouyinSpiHandler` 支持两种 action：
+  - `register`：初次注册，传入 openId + 掩码手机号
+  - `verify_mobile`：手机号验证，传入 openId + 完整手机号
+**DOUYIN_OPENID** 作为渠道内强标识，可直接匹配已有会员。
+**DOUYIN_MOBILE_MASK** 仅存储备查，不参与匹配。
+验证后的完整手机号以 `MOBILE_PLAIN` 类型写入 `member_unique_key`，作为跨渠道强标识。
+写入时若触发唯一约束冲突，自动执行会员合并。
 ### 7.3 双轨制映射引擎
 * **模式一：可视化连线 (VISUAL)**：通过 JSONPath 配置字段映射
 * **模式二：高级脚本转换 (SCRIPT)**：利用 GraalVM JS 引擎处理复杂聚合运算
@@ -696,37 +782,93 @@ public class SpiGatewayController {
 严格限制：`allowAllAccess(false)`、`allowHostAccess(NONE)`、`allowIO(false)`、`allowNativeAccess(false)`，执行超时 50ms。
 ### 7.4 事件标准化生命周期与死信处理
 `event_inbox` 状态机：`RECEIVED → VALIDATING → VALIDATED → PROCESSING → COMPLETED`（失败则进入 `TRANSFORM_FAILED → RETRYING → DEAD`）。
-### 7.5 API 实体到接口的自动生成
-用户在 ChartDB 中设计 API 实体后，系统自动生成 JSON Schema、映射脚本骨架，并动态注册 SPI 路由。
+### 7.5 映射配置器与 Schema 编辑器后端 API
+#### 7.5.1 映射配置器相关 API
+
+| API | 方法 | 说明 |
+|-----|------|------|
+| `/api/admin/channels` | GET | 获取当前 Program 的所有渠道列表及其映射状态 |
+| `/api/admin/channels/{channel}` | GET | 获取指定渠道的映射配置（transform_script + field_mappings） |
+| `/api/admin/channels/{channel}` | PUT | 保存指定渠道的映射脚本和字段映射配置 |
+| `/api/admin/channels/{channel}/test` | POST | 测试映射（输入示例源 JSON，GraalVM 沙箱执行，返回转换结果） |
+
+#### 7.5.2 Schema 编辑器相关 API
+
+| API | 方法 | 说明 |
+|-----|------|------|
+| `/api/admin/schemas/{entityType}/current` | GET | 获取当前 ACTIVE 版本的最新 Schema |
+| `/api/admin/schemas/{entityType}/draft` | POST | 保存草稿（status=DRAFT） |
+| `/api/admin/schemas/{entityType}/publish` | POST | 发布新版本 Schema（生成新版本号，旧版本→DEPRECATED） |
+| `/api/admin/schemas/{entityType}/versions` | GET | 获取版本历史列表 |
+| `/api/admin/schemas/{entityType}/versions/{version}` | GET | 获取指定版本的 Schema |
+| `/api/admin/schemas/{entityType}/rollback` | POST | 回滚到指定版本 |
+| `/api/admin/schemas/{entityType}/deprecate-field` | POST | 废弃字段（含 DRL 引用检查） |
+
+#### 7.5.3 存储说明
+
+**映射配置存储**：每个渠道的映射配置存储在 `channel_adapter_config` 表：
+
 ```sql
-ALTER TABLE channel_adapter_config
-ADD COLUMN api_entity_name VARCHAR(100),
-ADD COLUMN request_schema JSONB,
-ADD COLUMN response_schema JSONB,
-ADD COLUMN cross_validations JSONB,
-ADD COLUMN generated_controller BOOLEAN DEFAULT false;
+UPDATE channel_adapter_config 
+SET transform_script = 'function transform(source) { ... }',
+    mapping_mode = 'SCRIPT'
+WHERE program_code = ? AND channel = ?;
 ```
-API 实体支持字段级校验和跨字段联合校验脚本：
-```json
-{
-  "cross_validations": [{
-    "type": "SCRIPT",
-    "language": "javascript",
-    "script": "if (source.order_amount > 10000 && !source.coupon_code) { throw new Error('订单金额超过10000时必须填写优惠券码'); }",
-    "error_message": "订单金额超过10000时必须填写优惠券码",
-    "dependencies": ["coupon_code"]
-  }]
-}
+Schema 存储：存储在 program_schema 表：
+```sql
+CREATE TABLE program_schema (
+    id BIGSERIAL PRIMARY KEY,
+    program_code VARCHAR(32) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    version VARCHAR(16) NOT NULL,
+    field_schema JSONB NOT NULL,
+    entity_relations JSONB,
+    api_config JSONB,
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (program_code, entity_type, version)
+);
 ```
+| 字段                 | 说明                                    |
+| ------------------ | ------------------------------------- |
+| `field_schema`     | Schema 编辑器产出的 Formily 可消费 JSON Schema |
+| `entity_relations` | 业务实体到系统实体的映射关系                        |
+| `api_config`       | API 实体的路由和校验配置                        |
+
+#### 7.5.4 系统内部固定流程
+以下流程为后端代码固定实现，不在可视化配置范围内：
+```text
+API 请求 → SpiGatewayController 接收
+  → 映射脚本转换（GraalVM 沙箱执行 transform_script）
+  → TransactionEvent 标准化
+  → One-ID 匹配（member_unique_key 查询）
+  → 规则引擎推理（Drools DRL）
+  → PointGrantService 发放积分（瀑布流冲抵）
+  → TierEvaluationService 评估等级
+  → EventBridge 发布事件
+```
+
 ***
-# 第八章：管理界面设计与前端规范
+## 第八章：管理界面设计与前端规范
 ## 8.1 总体思路与前端设计哲学
 ### 8.1.1 Schema-Driven UI 架构
-在 SaaS 平台中，运营人员对"活动规则"和"会员属性"的调整频率极高。如果每增加一个会员字段都要经历"后端修改 DB → 前端修改代码 → 打包发版"的周期，将严重降低业务响应速度。本系统采用 **Schema-Driven UI (Schema 驱动 UI)** 架构。
-我们将前端界面逻辑分为两层：
-* **设计器态 (Form Builder)**：管理员通过画布拖拽配置动态属性或活动规则，配置结果保存为 JSON Schema
-* **运行态 (Renderer)**：前端界面根据后端下发的 JSON Schema，自动渲染表单、列表或详情页，无需关心具体字段
-### 8.1.2 前端设计哲学
+运营人员对"活动规则"和"会员属性"的调整频率极高。如果每增加一个会员字段都要经历"后端修改 DB → 前端修改代码 → 打包发版"的周期，将严重降低业务响应速度。本系统采用 **Schema-Driven UI** 架构。
+前端界面分为两层：
+* **设计器态**：管理员通过 Schema 编辑器定义动态属性的 JSON Schema，通过映射配置器定义 API 字段到系统字段的转换规则。配置结果保存为 JSON Schema 和 GraalVM 脚本。
+* **运行态**：前端界面根据后端下发的 JSON Schema 自动渲染表单、列表或详情页。SPI 网关根据映射脚本自动转换外部数据。
+### 8.1.2 两个核心设计工具
+| 工具             | 解决的问题                                                 | 技术                 |
+| -------------- | ----------------------------------------------------- | ------------------ |
+| **Schema 编辑器** | 定义会员扩展属性（`ext_attributes`）和交易扩展数据（`payload`）的 JSON 结构 | JsonSea + 属性面板     |
+| **映射配置器**      | 定义 API 实体字段 → 系统实体字段的映射关系                             | Monaco 脚本编辑器 + 映射表 |
+两者独立运行，数据流向清晰：
+```text
+Schema 编辑器 → 定义 ext_attributes/payload 结构 → 会员详情页 Formily 渲染
+                                                  → 规则引擎 DRL 引用
+映射配置器 → 定义 API→系统字段映射 → SPI 网关接收数据时自动转换
+```
+> **注意**：系统内部固定流程（One-ID 匹配 → 积分计算 → 等级评估 → 事件发布）不在可视化配置范围内，由后端代码实现。
+### 8.1.3 前端设计哲学
 * **纯白底色**：全站统一 `#ffffff` 背景，无灰色背景区
 * **黑线条风格**：按钮、图标、边框统一使用 `#1a1a1a`
 * **点击编辑**：列表项默认显示文字，点击才出现输入框，减少视觉噪音
@@ -799,15 +941,17 @@ dot: width 20px; height 20px; background #ffffff; border-radius 50%;
 * 统一规格：`stroke="#1a1a1a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"`
 * 尺寸：步进箭头 20×20，步骤图标 24×24，按钮箭头 16×16
 ### 8.2.8 前端技术栈
-| 层级       | 技术                                                                 |
-| -------- | ------------------------------------------------------------------ |
-| 核心框架     | React 18 + TypeScript + Vite                                       |
-| UI 组件库   | Ant Design 5                                                       |
-| 动态表单     | Formily 2.x (`@formily/core` + `@formily/react` + `@formily/antd`) |
-| 画布引擎     | ChartDB（开源 React 组件，用于 DB Schema 设计器）                              |
-| 状态管理     | Zustand                                                            |
-| HTTP 客户端 | axios                                                              |
-| 路由       | React Router v6                                                    |
+| 层级        | 技术                                                                 |
+| --------- | ------------------------------------------------------------------ |
+| 核心框架      | React 18 + TypeScript + Vite                                       |
+| UI 组件库    | Ant Design 5                                                       |
+| 动态表单      | Formily 2.x (`@formily/core` + `@formily/react` + `@formily/antd`) |
+| Schema 编辑 | JsonSea（树形 JSON Schema 编辑器）                                        |
+| 代码编辑      | Monaco Editor（映射脚本编辑、DRL 编辑）                                       |
+| 状态管理      | Zustand                                                            |
+| HTTP 客户端  | axios                                                              |
+| 路由        | React Router v6                                                    |
+> **注意**：已废弃 ChartDB 和 React Flow。Schema 编辑器使用 JsonSea，映射配置器使用 Monaco Editor。
 ***
 ## 8.3 布局架构
 ### 8.3.1 页面路由结构
@@ -818,8 +962,8 @@ dot: width 20px; height 20px; background #ffffff; border-radius 50%;
   /dashboard        → 仪表盘
   /members          → 会员列表
   /members/:id      → 会员详情
-  /modeling/entity  → DB Schema 设计器
-  /modeling/schema  → 表单 Schema 设计器
+  /schema-editor    → Schema 编辑器
+  /mapping-config   → 映射配置器
   /rules            → 规则列表
   /rules/new        → 规则编辑器
   /channels         → 渠道列表
@@ -837,19 +981,20 @@ dot: width 20px; height 20px; background #ffffff; border-radius 50%;
 │ 当前俱乐部: PROG001          环境: DEV | v1.0.0           │ ← Footer 32px
 └──────────────────────────────────────────────────────────┘
 ```
-* Header：白色底 `#ffffff`，`border-bottom: 1px solid #f0f0f0`，`box-shadow: 0 1px 4px rgba(0,0,0,0.04)`
+* Header：白色底，`border-bottom: 1px solid #f0f0f0`，`box-shadow: 0 1px 4px rgba(0,0,0,0.04)`
 * 菜单：`mode="horizontal"`，`triggerSubMenuAction="hover"`
 * Footer：白色底，顶部 `1px solid #f0f0f0` 分割
-* 内容区：面包屑导航 + `<Outlet />`，所有页面 API 请求自动注入 `X-Program-Code`
 ### 8.3.3 菜单结构
-| 一级菜单 | 二级菜单/路由                                                               |
-| ---- | --------------------------------------------------------------------- |
-| 数据建模 | DB Schema 设计器 (`/modeling/entity`)、表单 Schema 设计器 (`/modeling/schema`) |
-| 会员服务 | 会员列表 (`/members`)                                                     |
-| 规则引擎 | 规则列表 (`/rules`)                                                       |
-| 设置   | 积分类型、等级设置、渠道列表、脚本工作台、角色权限、操作日志、SPI 日志、租户审计                            |
+| 一级菜单 | 路由                | 说明                                         |
+| ---- | ----------------- | ------------------------------------------ |
+| 数据建模 | `/schema-editor`  | Schema 编辑器（会员属性 / 交易数据）                    |
+|      | `/mapping-config` | 映射配置器（渠道字段映射）                              |
+| 会员服务 | `/members`        | 会员列表                                       |
+| 规则引擎 | `/rules`          | 规则列表                                       |
+| 设置   | `/system/*`       | 积分类型、等级设置、渠道列表、脚本工作台、角色权限、操作日志、SPI 日志、租户审计 |
 ### 8.3.4 前端路由配置
-```typescript
+typescript
+```
 const routes = [
   { path: '/login', element: <Login /> },
   { path: '/onboarding', element: <Onboarding /> },
@@ -857,8 +1002,8 @@ const routes = [
     { path: '/dashboard', element: <Dashboard /> },
     { path: '/members', element: <MemberList /> },
     { path: '/members/:id', element: <MemberDetail /> },
-    { path: '/modeling/entity', element: <EntitySchemaDesigner /> },
-    { path: '/modeling/schema', element: <FormSchemaDesigner /> },
+    { path: '/schema-editor', element: <SchemaEditor /> },
+    { path: '/mapping-config', element: <MappingConfig /> },
     { path: '/rules', element: <RuleList /> },
     { path: '/rules/new', element: <RuleEditor /> },
     { path: '/channels', element: <ChannelList /> },
@@ -866,23 +1011,21 @@ const routes = [
   ]},
 ];
 ```
-路由守卫 `AuthGuard` 检查用户登录状态及按钮级权限，无权限跳转 403 页面。
 ### 8.3.5 全局状态管理（Zustand Store）
-```typescript
+typescript
+```
 interface AppStore {
-  currentProgramCode: string;     // 当前 Program
-  programs: Program[];            // Program 列表
+  currentProgramCode: string;
+  programs: Program[];
   setCurrentProgram: (code: string) => void;
-  user: UserInfo | null;         // 用户信息
-  permissions: string[];         // 权限列表
+  user: UserInfo | null;
+  permissions: string[];
   setUser: (user: UserInfo, permissions: string[]) => void;
   hasPermission: (perm: string) => boolean;
-  online: boolean;               // 网络状态
+  online: boolean;
 }
 ```
-数据刷新策略：
 * 切换 Program 时，清空所有缓存列表数据，触发全局 `key` 变化强制重渲染
-* 会员详情等频繁访问的数据使用 `react-query` 缓存，staleTime 30 秒
 * 列表页筛选条件同步到 URL query params，支持浏览器前进/后退和书签
 ### 8.3.6 API 层封装
 * axios 实例，baseURL: `/api`
@@ -896,12 +1039,13 @@ interface AppStore {
 * **确认**：Enter 或 onBlur 退出编辑
 * **宽度**：通过 `style.width` 固定列宽，`overflow: hidden; text-overflow: ellipsis`
 ### 8.4.2 ClickToEdit（点击编辑数值）
-同 ClickToEditText，但输入框为 `type="number"`，可带单位后缀（如 "分"、"天"）。
+同 ClickToEditText，但输入框为 `type="number"`，可带单位后缀。
 ### 8.4.3 ClickToEditSelect（点击编辑下拉）
 * **显示态**：文字 + 虚线（显示当前选项的 label）
 * **编辑态**：点击后变为 `<select>`，选择后自动退出编辑
 ### 8.4.4 PageWrapper（页面容器）
-```tsx
+tsx
+```
 <PageWrapper loading={loading} error={error} isEmpty={!data?.length}
   emptyText="暂无数据" onRetry={fetchData}>
   {children}
@@ -912,7 +1056,8 @@ interface AppStore {
 * `empty` → Empty 组件
 * 正常 → 渲染 children
 ### 8.4.5 StatCard（统计卡片）
-```tsx
+tsx
+```
 <StatCard title="会员总数" value={12345} prefix={<Icon />} trend={12} trendLabel="较昨日" />
 ```
 ### 8.4.6 页面通用规范
@@ -945,6 +1090,7 @@ border-bottom: 1px dashed #d9d9d9; padding: 2px 0;
 ```
 ***
 ## 8.5 登录页面
+
 ```text
         [Logo SVG]
     忠诚度管理平台
@@ -963,6 +1109,7 @@ border-bottom: 1px dashed #d9d9d9; padding: 2px 0;
 ## 8.6 新用户引导流程 (Onboarding)
 设计为 **3 步顺序向导**，全屏独立页面，无顶部菜单。
 ### 8.6.1 页面布局
+
 ```text
         ①         ②         ③
     俱乐部设置 → 积分类型设置 → 等级设置
@@ -982,13 +1129,13 @@ border-bottom: 1px dashed #d9d9d9; padding: 2px 0;
 * 步骤间：20px 箭头 `────>`
 * 步骤标签下方：`40px 宽 2px 深灰线` 标识当前步骤
 * 内容卡片：`max-width: 720px 居中`，`max-height: calc(100vh - 280px) overflow: auto`
-* `<< 上一步` 文字链接：13px `#999999`，hover `#1a1a1a`，`marginLeft: auto`
 ### 8.6.2 Step 1 — 俱乐部设置
 * 表单字段：俱乐部代码（必填）、显示名称（必填）、描述（可选）
 * 按钮：`保存并继续 →`（黑底白字，含箭头图标）
 * 保存时调用 `POST /api/admin/programs`
 ### 8.6.3 Step 2 — 积分类型设置
 **行结构（单行 flex）**：
+
 ```text
 [名称] [代码] [类型▼] [配置项...] [×删除]
 ```
@@ -1008,13 +1155,14 @@ border-bottom: 1px dashed #d9d9d9; padding: 2px 0;
 **交互**：
 * 名称/代码：ClickToEditText
 * 类型：`<select>` 下拉
-* 有效期值/额度：ClickToEdit（点击编辑数值）
-* 有效期模式：ClickToEditSelect（点击编辑下拉）
+* 有效期值/额度：ClickToEdit
+* 有效期模式：ClickToEditSelect
 * 负分/可见：Toggle 开关
 * 删除：`×` 按钮
-* 添加：`+ 添加积分类型` 文字链接（灰色虚线，hover 变黑，点击新增一行）
+* 添加：`+ 添加积分类型` 文字链接
 ### 8.6.4 Step 3 — 等级设置
 **行结构（单行 flex）**：
+
 ```text
 [代码] [名称] [关联积分▼] 成长值 [min] — [max] 有效期 [val] [模式] 顺序 N [×]
 ```
@@ -1022,220 +1170,208 @@ border-bottom: 1px dashed #d9d9d9; padding: 2px 0;
 **默认预设 4 个等级**：BASE → SILVER → GOLD → PLATINUM，关联 TIER 类型
 **交互**：全部使用 ClickToEdit/ClickToEditSelect
 ### 8.6.5 完成页
+
 ```text
         ✅ 基础设置完成！
    俱乐部、积分类型、等级已配置完毕
         [进入仪表盘 →]
 ```
 ***
-## 8.7 表单 Schema 设计器
-### 8.7.1 实体选择器
+## 8.7 映射配置器
+映射配置器用于定义 **API 实体字段 → 系统实体字段** 的映射关系。当商户新接入一个渠道（如拼多多），只需在此配置映射规则，无需修改后端代码。系统内部固定流程（One-ID 匹配 → 积分计算 → 等级评估 → 事件发布）不在本工具的可视化配置范围内。
+### 8.7.1 整体布局
+
 ```text
-实体: [会员] [交易] [+ 添加实体]
+┌──────────────────────────────────────────────────────────────┐
+│ 映射配置器                                    [保存] [测试映射] │
+├────────────┬─────────────────────────────────────────────────┤
+│            │                                                 │
+│  渠道列表   │              映射配置区                         │
+│            │                                                 │
+│  天猫 ●    │  ┌───────────────────────────────────────────┐ │
+│  京东 ●    │  │ 渠道: 天猫                                  │ │
+│  抖音 ●    │  │ 系统实体: TransactionEvent                 │ │
+│  微信 ●    │  │ 映射方式: [等值映射] [路径映射] [脚本映射]   │ │
+│  唯品会 ●  │  │                                           │ │
+│  POS   ●  │  │ ─────── 路径映射表 ───────                  │ │
+│            │  │                                           │ │
+│ [+ 新增]   │  │ 源字段(OrderRequest)  目标字段路径          │ │
+│            │  │ tradeNo           →  idempotent_key  [自动]│ │
+│            │  │ tradeTime         →  event_time      [自动]│ │
+│            │  │ channelType       →  channel         [自动]│ │
+│            │  │ totalPrice        →  payload.order_info   │ │
+│            │  │                     .amounts.total_price   │ │
+│            │  │ [+ 添加映射行]                              │ │
+│            │  │                                           │ │
+│            │  │ ─────── 脚本补充（Monaco Editor）───────    │ │
+│            │  │ function transform(source, context) {      │ │
+│            │  │   const base = applyFieldMappings(source); │ │
+│            │  │   base.event_type = mapOrderType(          │ │
+│            │  │     source.orderType);                     │ │
+│            │  │   return base;                             │ │
+│            │  │ }                                          │ │
+│            │  │                                           │ │
+│            │  │ ─────── 预览 ───────                       │ │
+│            │  │ [输入示例JSON] → [预览转换结果]              │ │
+│            │  └───────────────────────────────────────────┘ │ │
+│            │                                                 │
+│            │  系统流程（固定，仅供参考）:                       │
+│            │  API → 映射 → One-ID → Drools → 积分 → 等级      │
+└────────────┴─────────────────────────────────────────────────┘
 ```
-* 点击标签切换实体
-* 点击 `+ 添加实体` 输入新实体名称
-* 每个实体独立 Schema 存储
-### 8.7.2 布局（三栏）
-```text
-┌──────────┬────────────────────────────┬──────────┐
-│ 组件面板  │         设计画布            │ 属性面板  │
-│          │    ┌──────────────────┐    │          │
-│ Input    │    │  字段1: Input    │    │          │
-│ Select   │    │  字段2: Select   │    │          │
-│ ...      │    └──────────────────┘    │          │
-└──────────┴────────────────────────────┴──────────┘
-```
-* 左栏：组件面板（Card，200px），可拖拽组件到画布
-* 中栏：设计画布（拖拽区域，dashed border）
-* 右栏：属性面板，选中字段时显示配置项
-* 字段卡片：名称 + 类型标签 + 配置/删除按钮
-* 展开配置区：标题、必填开关、联动表达式
-### 8.7.3 自定义组件注册
-平台内置 Input、Select、NumberPicker 等基础组件，但支持 Program 级别扩充自定义 `x-component`：
-```json
-{
-  "store_selector": {
-    "title": "归属门店",
-    "type": "string",
-    "x-component": "CustomStoreSelector",
-    "x-component-props": {
-      "source": "remote",
-      "endpoint": "/api/stores",
-      "multiple": false
-    }
-  }
-}
-```
-Formily 支持全局组件注册机制，自定义组件在应用初始化时注册：
-```javascript
-const componentRegistry = {
-  'CustomStoreSelector': CustomStoreSelector,
-  'ImageUploader': ImageUploader,
-  'CascadingAddress': CascadingAddress,
-};
+### 8.7.2 渠道列表
+左侧展示所有已接入的渠道，点击切换查看对应渠道的映射配置。绿色圆点表示已配置映射，灰色圆点表示未配置。
+| 渠道        | 状态    | 映射方式   |
+| --------- | ----- | ------ |
+| 天猫        | ● 已配置 | SCRIPT |
+| 京东        | ● 已配置 | SCRIPT |
+| 抖音        | ● 已配置 | SCRIPT |
+| 微信        | ● 已配置 | PATH   |
+| POS       | ● 已配置 | PATH   |
+| [+ 新增渠道] |       |        |
+点击 [+ 新增渠道] 弹出渠道配置表单（渠道标识、名称、认证方式、密钥等），保存后在 `channel_adapter_config` 表创建记录。
+### 8.7.3 映射配置
+选中渠道后，右侧展示该渠道的映射配置：
+**等值映射**：系统自动匹配同名字段（如 `tradeNo` → `idempotent_key`），标记为 [自动]。用户可删除或修改。
+**路径映射**：手动配对源字段路径 → 目标字段路径。源字段和路径从系统实体的 Schema 中自动补全。支持嵌套路径（如 `payload.order_info.amounts.total_price`）。
+**脚本补充**：Monaco Editor 嵌入，处理等值映射和路径映射无法覆盖的特殊逻辑（如 `orderType` → `event_type` 的枚举转换）。等值映射和路径映射的结果自动生成脚本代码骨架，用户只需补充特殊逻辑。
+### 8.7.4 预览测试
+输入示例源 JSON → 点击 [测试映射] → 调用后端 GraalVM 沙箱执行脚本 → 右侧展示转换后的目标 JSON。错误时显示详细错误信息和行号。
+### 8.7.5 存储
+每个渠道的映射配置存储在 `channel_adapter_config` 表：
+
+```sql
+-- transform_script 存储完整的 GraalVM 映射脚本
+-- field_mappings 存储等值映射和路径映射的配置（JSONB）
+-- mapping_mode 标识映射方式：VISUAL / SCRIPT
+- `transform_script`：完整的 GraalVM 映射脚本
+- `field_mappings`（JSONB）：等值映射和路径映射的配置
+- `mapping_mode`：映射方式（VISUAL / SCRIPT）
 ```
 ***
-## 8.8 DB Schema 设计器 — 基于 ChartDB 的三层实体模型
-### 8.8.1 技术选型
-选用 **ChartDB**（开源 React 组件）作为画布引擎：
-* 原生 React 组件，可直接嵌入
-* 支持节点、字段、连线、JSON 导入导出
-* 支持列级别 `extensions` 扩展属性（承载 Formily 属性）
-* 现代化 UI，与 Ant Design 风格一致
-### 8.8.2 三层实体模型
-画布上区分三类实体：
-| 实体类型   | 视觉标识      | 可否删除 | 说明                                                                |
-| ------ | --------- | ---- | ----------------------------------------------------------------- |
-| 系统实体   | 灰色背景 + 🔒 | ❌    | Member, TransactionEvent, MemberAccount, MemberUniqueKey, Program |
-| 业务实体   | 蓝色背景 + 📦 | ✅    | PetInfo, PurchaseRecord 等，映射到系统实体的 JSONB 容器字段                     |
-| API 实体 | 绿色背景 + 🔌 | ✅    | OrderRequest, EnrollRequest 等，映射到 SPI 网关接口                        |
-### 8.8.3 系统实体预加载
-画布初始化时自动放置以下系统实体（锁定不可删除）：
-**Member（会员）**：
-| 字段               | 类型       | 锁定    | 说明                                    |
-| ---------------- | -------- | ----- | ------------------------------------- |
-| `member_id`      | String   | 🔒    | 主键，One-ID                             |
-| `program_code`   | String   | 🔒    | 租户隔离                                  |
-| `status`         | Enum     | 🔒    | ENROLLED/SUSPENDED/MERGED/DEACTIVATED |
-| `tier_code`      | String   | 🔓    | 当前等级                                  |
-| `schema_version` | String   | 🔓    | Schema 版本号                            |
-| `created_at`     | DateTime | 🔒    | 注册时间                                  |
-| `ext_attributes` | Object   | 🔓 容器 | 动态扩展属性（内容由业务实体定义）                     |
-**TransactionEvent（交易事件）**：
-| 字段               | 类型       | 锁定    | 说明                             |
-| ---------------- | -------- | ----- | ------------------------------ |
-| `event_id`       | String   | 🔒    | 主键                             |
-| `member_id`      | String   | 🔒    | 外键→Member                      |
-| `event_type`     | Enum     | 🔒    | ORDER/ENROLL/CUSTOM/REDEMPTION |
-| `channel`        | String   | 🔒    | 渠道标识                           |
-| `event_time`     | DateTime | 🔒    | 事件时间                           |
-| `idempotent_key` | String   | 🔒    | 幂等键                            |
-| `payload`        | Object   | 🔓 容器 | 动态扩展数据                         |
-**MemberAccount（积分账户）**、**MemberUniqueKey（One-ID 辅助表）**、**Program（租户计划）** 同样预加载并锁定。
-### 8.8.4 系统实体预加载连线
+## 8.8 Schema 编辑器
+Schema 编辑器用于定义**会员扩展属性（`ext_attributes`）和交易扩展数据（`payload`）的 JSON 结构**。不同行业的商户可以自定义字段，如美妆行业需要"肤质"、汽车行业需要"车牌号"。定义的 Schema 被 Formily 动态表单消费，实现前端自动渲染。
+### 8.8.1 整体布局
+
 ```text
-Member ───1:N─── MemberUniqueKey
-Member ───1:1─── MemberAccount
-TransactionEvent ───N:1─── Member
+┌──────────────────────────────────────────────────────────────┐
+│ Schema 编辑器                          [保存草稿] [发布] [版本] │
+├──────────────────────┬───────────────────────────────────────┤
+│                      │                                       │
+│  实体选择器           │  Schema 编辑区（JsonSea）               │
+│                      │                                       │
+│ [会员ext_attributes] │  ▼ amounts (object)                   │
+│ [交易payload]        │    ├─ total_price (number) > 0       │
+│ [+ 新建业务实体]      │    └─ trade_price (number) > 0       │
+│                      │  ▼ products (array)                   │
+│                      │    └─ [item]                          │
+│                      │        ├─ commodity_code (string) ✅  │
+│                      │        ├─ price (number)      > 0    │
+│                      │        └─ quant (number)      ≥ 1   │
+│                      │                                       │
+│                      │  [+ 添加字段]                          │
+│                      │                                       │
+│                      │  右侧面板（选中字段时）:                 │
+│                      │  ┌─────────────────────────────┐     │
+│                      │  │ 字段名: total_price          │     │
+│                      │  │ 类型:    [number ▼]          │     │
+│                      │  │ 标题:    订单总金额           │     │
+│                      │  │ 必填:    [开关]              │     │
+│                      │  │ 最小值:  0.01                │     │
+│                      │  │ x-component: [NumberPicker]  │     │
+│                      │  │ x-reactions: [联动构建器]    │     │
+│                      │  │ deprecated: [开关]           │     │
+│                      │  └─────────────────────────────┘     │
+└──────────────────────┴───────────────────────────────────────┘
 ```
-这些连线同样锁定，不可删除。
-### 8.8.5 业务实体设计
-业务实体映射到系统实体的 JSONB 容器字段。连线时配置映射关系：
-| 配置项   | 说明             | 示例              |
-| ----- | -------------- | --------------- |
-| 源实体   | 业务实体           | PetInfo         |
-| 目标实体  | 系统实体           | Member          |
-| 映射到字段 | 系统实体的 JSONB 字段 | ext_attributes |
-| 存储路径  | JSON 中的 Key 名  | pets            |
-| 存储方式  | Object / Array | Array           |
-### 8.8.6 API 实体设计
-API 实体额外支持：
-**基础校验规则**：`required`, `min_length`, `max_length`, `pattern`, `minimum`, `maximum`, `enum_values`
-**联合校验脚本**：JavaScript 函数，支持跨字段校验：
-```json
-{
-  "cross_validations": [{
-    "type": "SCRIPT",
-    "language": "javascript",
-    "script": "if (source.order_amount > 10000 && !source.coupon_code) { throw new Error('订单金额超过10000时必须填写优惠券码'); }",
-    "error_message": "订单金额超过10000时必须填写优惠券码",
-    "dependencies": ["coupon_code"]
-  }]
-}
+### 8.8.2 实体选择器
+顶部 Tab 切换：
+
+```text
+实体: [会员(ext_attributes)] [交易(payload)] [+ 新建业务实体]
 ```
-**API 路由配置**：`method`, `path`, `auth_type`, `response_entity`
-### 8.8.7 右侧属性面板
-选中字段时滑出，两个 Tab：
-* **结构配置 Tab**：字段名、类型、主键、必填、默认值、枚举值、强标识标记、子对象入口
-* **呈现配置 Tab**：x-component（Select 选择 Formily 组件）、x-reactions（可视化构建器/手写表达式切换）、x-validator、deprecated
-**联动规则可视化构建器**：
-* 选择依赖字段
-* 选择条件运算符（`===`, `!==`, `>`, `<`, `includes`）
-* 输入比较值
-* 选择目标效果（显示/隐藏、必填/非必填）
-* 自动生成 `x-reactions` 表达式
-### 8.8.8 数据转换
-* 保存时：ChartDB 数据 + extensions → LoyaltySchema（Formily 可消费格式）
-* 加载时：LoyaltySchema → ChartDB 数据 + extensions
-转换示例：
-```json
-{
-  "entityType": "MEMBER",
-  "version": "v1.2.0",
-  "field_schema": {
-    "type": "object",
-    "properties": {
-      "pet_name": {
-        "title": "宠物名称",
-        "type": "string",
-        "x-component": "Input"
-      },
-      "pets": {
-        "title": "宠物档案",
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "pet_type": { "title": "宠物类型", "type": "string", "x-component": "Select" }
-          }
-        }
-      }
-    }
-  },
-  "entity_relations": [
-    {
-      "source": "member",
-      "target": "pet_info",
-      "relationType": "1:N",
-      "foreignKeyField": "member_id"
-    }
-  ]
-}
+* **会员**：编辑 `Member.ext_attributes` 的 JSON Schema。直接影响会员详情页"属性扩展" Tab 的表单渲染。
+* **交易**：编辑 `TransactionEvent.payload` 的 JSON Schema。直接影响交易数据的存储结构。
+* **新建业务实体**：创建独立的业务实体（如 PetInfo、OrderInfo），映射到系统实体的 JSONB 容器字段。创建后出现在实体列表中。
+### 8.8.3 Formily 属性配置
+选中字段时，右侧面板配置：
+| 属性            | 控件      | 说明                                                                      |
+| ------------- | ------- | ----------------------------------------------------------------------- |
+| `x-component` | Select  | Input / NumberPicker / Select / DatePicker / Switch / Upload / Cascader |
+| `x-reactions` | 联动构建器   | 可视化选择依赖字段、条件（===、!==、>、<、includes）、效果（显示/隐藏/必填）                         |
+| `x-validator` | JSON 编辑 | 校验规则（required/min/max/pattern）                                          |
+| `deprecated`  | Switch  | 开启时触发后端 DRL 引用检查，有引用则弹窗告警                                               |
+### 8.8.4 联动规则可视化构建器
+
+```text
+┌─────────────────────────────────────────────┐
+│ 联动规则                                      │
+│ ○ 可视化  ○ 手写表达式                        │
+│                                             │
+│ ┌─────────────────────────────────────────┐ │
+│ │ 当 [pet_type ▼] [等于 ▼] [狗         ]  │ │
+│ │ 时 [显示 ▼] [dog_breed              ▼]  │ │
+│ │                              [删除]      │ │
+│ └─────────────────────────────────────────┘ │
+│ [+ 添加联动]                                 │
+└─────────────────────────────────────────────┘
 ```
-### 8.8.9 版本管理
-`program_schema` 表存储 Schema 版本，支持 DRAFT/ACTIVE/DEPRECATED 状态流转，历史版本回滚。
-### 8.8.10 画布交互与快捷键
-| 操作        | 快捷键                   | 说明            |
-| --------- | --------------------- | ------------- |
-| 添加业务实体    | `B`                   | 创建蓝色业务实体节点    |
-| 添加 API 实体 | `A`                   | 创建绿色 API 实体节点 |
-| 连线模式      | `L`                   | 切换鼠标为连线模式     |
-| 删除选中      | `Delete`              | 删除选中节点/连线     |
-| 适应画布      | `F`                   | 缩放平移使所有节点可见   |
-| 平移画布      | 空格+拖拽                 | 移动视野          |
-| 缩放画布      | 鼠标滚轮                  | 50%-200%      |
-| 撤销/重做     | Ctrl+Z / Ctrl+Shift+Z | 操作历史          |
-### 8.8.11 子对象嵌套编辑
-* 当字段类型为 `Object` 或 `Array` 时，右侧面板显示"编辑子对象"按钮
-* 点击后弹出嵌套画布 Modal，背景变暗，主画布不可操作
-* Modal 顶部显示面包屑：`会员(Member) > 宠物档案(PetInfo) > 疫苗记录(VaccineRecord)`
-* 完成编辑后，子 Schema 序列化嵌入父字段的 `subSchema` 属性
-### 8.8.12 导出与导入
-* 导出：将画布当前状态导出为 JSON 文件下载
-* 导入：支持上传 JSON 文件或粘贴 JSON 文本，解析后渲染到画布（清空现有内容前二次确认）
-* 版本历史抽屉：展示版本列表，支持预览和回滚
+自动生成 `x-reactions` 表达式，也可切换到"手写表达式"模式直接编辑。
+### 8.8.5 版本管理
+* **保存草稿**：`status=DRAFT`，不生成新版本号
+* **发布**：生成新版本号（如 `v1.3.0`），旧版本状态变更为 `DEPRECATED`
+* **版本历史**：抽屉展示版本列表，支持预览（加载对应版本数据到编辑器）和回滚
+* 发布时后端执行 DRL 引用检查（若有字段被标记为废弃）
+### 8.8.6 存储
+Schema 存储在 `program_schema` 表：
+
+```sql
+-- field_schema 字段存储 Formily 可消费的 JSON Schema
+-- entity_relations 字段存储业务实体到系统实体的映射关系
+-- api_config 字段存储 API 实体的路由和校验配置
+| 字段 | 说明 |
+|------|------|
+| `field_schema` | Schema 编辑器产出的 Formily 可消费 JSON Schema |
+| `entity_relations` | 业务实体到系统实体的映射关系 |
+| `api_config` | API 实体的路由和校验配置 |
+| `status` | DRAFT / ACTIVE / DEPRECATED |
+
+> 已删除 `chartdb_data` 字段，不再需要 React Flow 的画布状态。
+```
+### 8.8.7 与业务模块的衔接
+* **会员详情页**：`GET /api/admin/schemas/MEMBER/current` → `DynamicFormRenderer` 渲染动态表单
+* **保存时**：`MemberExtService.saveMemberExtAttributes`（双写 `_schema_version` + 强标识检查）
+* **规则引擎**：Schema 中的字段自动成为 DRL 可引用的 Fact 属性
+* **废弃检查**：废弃字段前检查所有 ACTIVE 规则的 DRL 内容，若引用则抛出 `ERR_FIELD_IN_USE`
+### 8.8.8 与映射配置器的关系
+
+```text
+Schema 编辑器                           映射配置器
+─────────────────                      ─────────────────
+定义 ext_attributes 结构               定义 API 字段 → 系统字段
+定义 payload 结构                      每个渠道独立配置
+输出: JSON Schema                      输出: GraalVM 映射脚本
+存储: program_schema 表                存储: channel_adapter_config 表
+```
+两者独立运行，不放在同一个页面。新接渠道时，先在映射配置器中定义字段映射，如需在 payload 中增加新字段，再在 Schema 编辑器中定义新字段的结构。
 ***
 ## 8.9 动态渲染实现流程
 ### 8.9.1 后端元数据存储
+
 ```json
 {
   "program_code": "BRAND-A",
   "field_schema": {
     "type": "object",
     "properties": {
-      "pet_name": { "title": "宠物名称", "type": "string", "x-component": "Input" },
-      "member_level_index": { "title": "会员等级指数", "type": "number", "x-component": "NumberPicker" }
+      "pet_name": { "title": "宠物名称", "type": "string", "x-component": "Input" }
     }
   }
 }
 ```
 ### 8.9.2 运行态渲染（React + Formily）
-在会员详情页，前端通过 `useEffect` 拉取 Schema 并动态加载：
+
 ```javascript
-import { createForm } from '@formily/core';
-import { FormProvider } from '@formily/react';
-import { SchemaField } from '@formily/react';
 const DynamicMemberEditor = ({ programCode, memberId }) => {
   const [schema, setSchema] = useState(null);
   const form = useMemo(() => createForm(), []);
@@ -1255,13 +1391,11 @@ const DynamicMemberEditor = ({ programCode, memberId }) => {
 };
 ```
 ### 8.9.3 历史数据与 Schema 版本兼容渲染
+
 ```javascript
 const DynamicMemberDetail = ({ memberData, currentSchema, schemaVersions }) => {
-  // 1. 取数据写入时的 Schema 版本
   const dataVersion = memberData.ext_attributes?._schema_version || memberData.schema_version;
-  // 2. 获取对应版本的 Schema 定义
   const effectiveSchema = schemaVersions[dataVersion] || currentSchema;
-  // 3. 用对应版本的 Schema 渲染表单
   return (
     <FormProvider form={form}>
       <SchemaField schema={effectiveSchema} />
@@ -1271,7 +1405,7 @@ const DynamicMemberDetail = ({ memberData, currentSchema, schemaVersions }) => {
 };
 ```
 ### 8.9.4 复杂联动逻辑
-对于"当宠物种类选择为'狗'时，显示'犬种明细'字段"这类联动，通过 `x-reactions` 声明：
+
 ```json
 {
   "pet_type": { "title": "宠物类型", "x-component": "Select" },
@@ -1286,15 +1420,12 @@ const DynamicMemberDetail = ({ memberData, currentSchema, schemaVersions }) => {
 ***
 ## 8.10 兼容性策略：字段废弃处理
 ### 8.10.1 废弃标记
-运营在设计器中删除字段时，系统不执行 SQL DROP COLUMN，而是将 Schema 中的字段属性标记为 `deprecated: true`。
-### 8.10.2 向下兼容展示
-* **只读态**：历史会员数据中包含已废弃字段的，前端提供"显示历史遗留字段"开关
-* **编辑态**：废弃字段默认从编辑表单中隐藏，防止误操作
-* 当 `dataVersion < currentVersion` 时，前端自动显示"数据版本已过期"提示，并提供"升级到最新版本"按钮
+不物理删除字段，标记 `deprecated: true`。
+### 8.10.2 向下兼容
+* 编辑模式隐藏废弃字段，详情模式折叠在「历史遗留字段」区域
+* 版本不一致时显示 Alert，提供"升级到最新版本"按钮
 ### 8.10.3 DRL 引用检查
-后端在废弃字段前检查所有 ACTIVE 规则的 DRL 内容：
-java
-```
+```java
 @Transactional
 public void deprecateField(String programCode, String entityType, String fieldKey) {
     List<Rule> activeRules = ruleRepo.findActiveByProgramCode(programCode);
@@ -1305,7 +1436,7 @@ public void deprecateField(String programCode, String entityType, String fieldKe
             rule.getDrlContent().contains("getPayloadString("" + fieldKey + "")") ||
             rule.getDrlContent().contains("getPayloadNumber("" + fieldKey + "")")) {
             throw new BusinessException("ERR_FIELD_IN_USE",
-                "字段 [" + fieldKey + "] 被规则 [" + rule.getRuleId() + "] 引用，请先修改规则后再废弃该字段");
+                "字段 [" + fieldKey + "] 被规则 [" + rule.getRuleId() + "] 引用，请先修改规则");
         }
     }
     schemaService.markFieldDeprecated(programCode, entityType, fieldKey);
@@ -1314,132 +1445,59 @@ public void deprecateField(String programCode, String entityType, String fieldKe
 ***
 ## 8.11 全局交互规范
 ### 8.11.1 加载状态
-所有数据请求必须覆盖以下状态，并在 UI 上体现：
-| 状态   | UI 表现                         | 触发条件                  |
-| ---- | ----------------------------- | --------------------- |
-| 首次加载 | 页面级 Spin + 骨架屏                | 页面初次进入，无缓存数据          |
-| 刷新加载 | 表格上方细进度条（`nprogress` 风格）      | 筛选条件变化、翻页、手动刷新        |
-| 局部加载 | 按钮 `loading` 图标               | 提交表单、行内操作             |
-| 空数据  | Empty 插图 + 引导文案 + 操作按钮        | 列表无数据                 |
-| 错误   | Result 组件 + 错误信息 + 重试按钮       | 网络异常、接口 5xx           |
-| 网络断开 | 全局顶部 Banner "网络连接已断开，正在重连..." | `navigator.onLine` 监听 |
+| 状态   | UI 表现          | 触发条件                                            |
+| ---- | -------------- | ----------------------------------------------- |
+| 首次加载 | 页面级 Spin + 骨架屏 | 页面初次进入                                          |
+| 刷新加载 | 表格上方细进度条       | 筛选/翻页/手动刷新                                      |
+| 局部加载 | 按钮 loading     | 提交/行内操作                                         |
+| 空数据  | Empty + 引导文案   | 列表无数据                                           |
+| 错误   | Result + 重试按钮  | 网络异常/5xx                                        |
+| 网络断开 | 全局顶部 Banner    | [navigator.onLine](https://navigator.onLine) 监听 |
 ### 8.11.2 表单交互规范
-* **必填标识**：所有必填字段标签旁红色星号 `*`
-* **实时校验**：输入框 `onBlur` 触发校验，错误信息红色文字显示在输入框下方
-* **提交防抖**：提交按钮点击后立即 `loading`，禁用 2 秒内重复点击
-* **未保存离开**：表单 `dirty` 状态为 true 时，浏览器 `beforeunload` 事件拦截，弹出确认对话框
-* **批量操作**：表格上方出现"已选择 N 项"操作栏，提供批量删除、批量导出等按钮
-### 8.11.3 移动端适配
-* 左侧菜单在屏幕宽度 < 768px 时自动隐藏，通过汉堡按钮呼出 Drawer 抽屉
-* 表格列在移动端自动折叠，只显示关键列（如会员ID+等级），点击展开查看详情
-* 画布设计器在移动端降级为只读模式，不支持拖拽编辑
+* 必填字段标签旁红色星号
+* onBlur 触发实时校验
+* 提交按钮 loading + 2 秒防抖
+* 表单 dirty 时 beforeunload 拦截
 ***
 ## 8.12 仪表盘
-### 8.12.1 数据流
-```text
-useEffect on mount 和 programCode 变化
-  → 并行请求：GET /api/dashboard/summary   → 指标卡片
-               GET /api/dashboard/trend    → 趋势图数据
-               GET /api/dashboard/alerts   → 告警列表
-  → 轮询告警列表（每 30 秒静默刷新，不影响 loading 状态）
-```
-### 8.12.2 指标卡片
-四张 `StatCard`：会员总数、今日新增、积分发放、积分核销。点击可跳转到对应列表页。
-趋势图使用 `@ant-design/charts` 的 Line 图，支持日/周/月 Tab 切换。
-### 8.12.3 告警类型与跳转映射
-| 告警类型                     | 图标 | 跳转路径                       | 操作按钮 |
-| ------------------------ | -- | -------------------------- | ---- |
-| CASCADE_RECALC_BACKLOG | ⚠️ | `/system/logs?type=recalc` | 查看积压 |
-| SPI_TIMEOUT_RATE_HIGH | 🚨 | `/system/spi-logs`         | 查看日志 |
-| TENANT_POLLUTION        | 🔴 | `/system/audit`            | 查看详情 |
-| RULE_COMPILE_FAILED    | ❌  | `/rules`                   | 编辑规则 |
+* 四张 StatCard：会员总数、今日新增、积分发放、积分核销，点击跳转
+* 积分趋势折线图（日/周/月切换）
+* 待处理告警列表，按类型跳转处理页
 ***
 ## 8.13 各功能页面设计
 ### 8.13.1 会员列表页
-* 搜索栏：手机号、会员ID、等级、状态、注册时间范围、**动态属性搜索**（根据当前 Program 的 Schema 动态生成输入框）
-  * `String` → `Input`（模糊搜索）
-  * `Number` → `InputNumber` + 范围选择
-  * `Enum` → `Select` 多选
-  * `Date` → `DatePicker.RangePicker`
-  * 搜索参数统一以 `ext_{fieldKey}` 格式传递给后端
-* 表格列：会员ID（可复制）、手机号（脱敏）、等级、状态、注册渠道、注册时间
-* 批量导入：多步骤 Modal（下载模板 → 上传文件 → 预览数据 → 确认导入 → 进度条 → 结果报告）
-* 行右键菜单：查看详情、合并会员
-* 列头支持排序，列宽可拖拽调整并记忆在 localStorage
+* 搜索栏：静态字段 + 动态属性搜索（根据当前 Schema 动态生成输入框）
+* 表格：会员ID（可复制）、手机号（脱敏）、等级、状态、渠道、注册时间
+* 批量导入：多步骤 Modal（下载模板 → 上传 → 预览 → 进度条 → 结果报告）
+* 行右键菜单、列排序、列宽拖拽
 ### 8.13.2 会员详情页
-* 顶部信息卡片：会员ID、等级徽章、状态标签、手机号、注册渠道；操作按钮：[停用] [合并]
-* Tab 页签：
-**基本信息 Tab**：只读表单，展示静态字段和未废弃的动态字段。
-**积分账户 Tab**：
-* 按积分类型分组展示卡片，每个卡片显示可用余额（大号数字）、信用使用进度条、累计获得/消耗/过期
-* 按钮：[查看流水] [调整积分]
-* 调整积分弹窗：增减类型、积分类型、金额、原因（必填），二次确认
-**交易流水 Tab**：
-* 带筛选的表格（类型、时间范围）
-* 点击核销流水 → 弹出 Drawer，上半部分核销详情，下半部分 `redemption_allocation` 明细表
-* 支持点击批次ID跳转到发分批次详情
-**渠道关联 Tab**：
-* 表格展示绑定的所有渠道（渠道名、OpenID、绑定时间）
-* 手动绑定按钮 → 弹窗选择渠道类型、输入 OpenID
-* 解绑操作需二次确认
-**属性扩展 Tab**：
-* 嵌入 `DynamicFormRenderer` 组件
-* 根据会员数据的 `schema_version` 加载对应 Schema 渲染表单
-* 版本不一致时显示 Alert："当前数据为旧版 Schema (v1.0.0)，部分字段可能已变更。 [升级到最新版本]"
-* 编辑模式下废弃字段隐藏，详情模式下废弃字段折叠在「历史遗留字段」区域
-### 8.13.3 积分管理
-**账户总览页**：按会员 ID 或手机号搜索，选择后展示其所有积分类型账户卡片。
-**积分流水页**：全局流水列表（跨会员），支持按会员ID、积分类型、交易类型、时间范围筛选。导出功能异步生成 Excel。
-### 8.13.4 规则引擎
-**规则列表页**：左侧规则树（按 Program → 规则分组），右侧表格（状态、优先级等），操作：编辑、复制、停用/启用、沙箱测试。
-**规则编辑器页**：
-* 左栏：基本信息表单（名称、分组、优先级）
-* 中栏：AI 辅助区域（自然语言输入 → 调用后端 LLM 接口 → 弹出预览 Modal）+ Monaco 编辑器（Drools 语法高亮、自动补全）
-* 右栏：属性面板
-**AI 生成交互**：输入自然语言 → 后端 LLM → 弹出预览 Modal（分析 + DRL 代码 + 测试用例）→ [采纳并编辑]。
-**发布流程**：先沙箱测试 → 绿色直接发布 / 黄色警告可仍要发布 / 红色需强制放行（输入理由 + `forceOverride=true`）。
-**沙箱回归测试页**：选择测试数据集 + 双列对比视图（基线 vs 候选），差异行高亮，汇总报告。
-### 8.13.5 渠道配置
-**渠道列表页**：表格（渠道标识、名称、映射模式、状态）+ 新建/编辑/测试连接。
-**渠道编辑页**：基本信息表单 + Tab（映射配置 / 验签配置）。
-**映射编辑器**：
-* 可视模式：左源 JSON 树（可粘贴示例）→ 右目标 Schema 树（拖拽连线生成 JSONPath 映射）
-* 脚本模式：Monaco 编辑器 + 测试输入/输出区 + [格式化] [测试运行] [保存]
-### 8.13.6 系统设置
-**角色权限管理**：角色列表 + 权限树（菜单和按钮级），权限节点数据从后端 `GET /api/permissions/tree` 获取。
-**操作日志**：全局操作日志，按用户/操作类型/时间筛选，可展开查看详情 JSON。
-**SPI 调用日志**：按渠道/时间/状态筛选，展开行显示请求/响应 JSON（语法高亮）。DEAD 事件提供 [重放] 按钮。
-**租户污染审计**：跨租户访问尝试记录，红色警示图标，支持导出 CSV。
+* 顶部：会员信息卡片 + [停用] [合并]
+* Tab：基本信息 / 积分账户 / 交易流水 / 渠道关联 / 属性扩展
+* 积分账户 Tab：按类型分组卡片，可用余额、信用进度条、[查看流水] [调整积分]
+* 交易流水 Tab：筛选表格 + 核销溯源 Drawer（redemption_allocation 明细）
+* 渠道关联 Tab：渠道列表 + 手动绑定/解绑
+* 属性扩展 Tab：DynamicFormRenderer + 版本不一致 Alert
+### 8.13.3 规则引擎
+* 规则列表：左侧规则树 + 右侧表格
+* 规则编辑器：AI 辅助 + Monaco 编辑器 + 属性面板- 发布流程：沙箱测试 → 绿/黄/红分级 → 强制放行
+### 8.13.4 渠道配置
+* 渠道列表 + 渠道编辑（基本信息 + 映射配置 + 验签配置）
+* 映射配置器：可视模式（映射表）/ 脚本模式（Monaco + 测试）
+### 8.13.5 系统设置
+* 角色权限管理、操作日志、SPI 调用日志、租户污染审计
 ***
 ## 8.14 设计器与业务模块的衔接
 ### 8.14.1 会员详情页
-会员详情页的属性扩展 Tab 直接消费设计器产出的 Schema：
-* 前端请求 `GET /api/admin/schemas/MEMBER/current`
-* 后端返回 LoyaltySchema → `DynamicFormRenderer` 渲染动态表单
-* 保存时调用 `MemberExtService.saveMemberExtAttributes`（含双写 + 强标识检查）
+* `GET /api/admin/schemas/MEMBER/current` → Formily 渲染 → 保存时双写 + 强标识检查
 ### 8.14.2 SPI 网关
-API 实体生成的接口自动注册到 SPI 网关：
-* 第三方回调 → `SpiGatewayController` 接收
-* 查找对应 API 实体配置 → JSON Schema 校验 → 联合校验脚本执行
-* 映射引擎转换（API 实体 → TransactionEvent）→ 投递 EventBridge
-### 8.14.3 规则引擎引用
-业务实体的字段自动成为 DRL 可引用的 Fact 属性：
-```drools
-rule "宠物主人专属优惠"
-when
-    $event : EventFact( eventType == "ORDER" )
-    $member : MemberFact( memberId == $event.memberId, getExtNumber("pets.length") > 0 )
-then
-    ActionCollector.awardPoints($event.getEventId(), 50, "PET_OWNER_REWARD");
-end
-```
-### 8.14.4 画布初始化状态
-用户首次进入 DB Schema 设计器时，画布预加载：
-* 5 个系统实体节点（锁定，灰色背景 + 🔒）
-* 3 条系统连线（锁定）
-* 用户可在此基础上创建业务实体和 API 实体
+* API 实体 → JSON Schema 校验 → GraalVM 映射脚本（映射配置器产出）→ TransactionEvent → EventBridge
+* 系统内部固定流程：One-ID 匹配 → Drools 积分计算 → PointGrantService 发分 → TierEvaluationService 评估等级
+### 8.14.3 规则引擎
+* Schema 编辑器定义的字段自动成为 DRL 可引用的 Fact 属性
+* 映射配置器的脚本在规则引擎之前执行，确保数据已标准化
 ***
-本章规定了系统的前端设计语言、布局架构、核心组件、所有功能页面的交互设计、以及设计器与业务模块的衔接方式。前端开发时需严格遵循本章的色彩、字体、组件和交互规范。
+本章规定了系统的前端设计语言、布局架构、核心组件、Schema 编辑器、映射配置器、所有功能页面的交互设计、以及设计器与业务模块的衔接方式。前端开发时需严格遵循本章的色彩、字体、组件和交互规范。**已废弃 ChartDB 和 React Flow，Schema 编辑器使用 JsonSea，映射配置器使用 Monaco Editor。**
+
 ## 第九章：多租户数据穿透与绝对防御体系
 ### 9.1 全局上下文持有器
 ```java
@@ -1494,24 +1552,59 @@ CREATE TABLE program (
 CREATE TABLE member (
     id BIGSERIAL PRIMARY KEY,
     program_code VARCHAR(32) NOT NULL,
-    member_id VARCHAR(64) NOT NULL UNIQUE,
-    tier_code VARCHAR(16),
-    status VARCHAR(16) NOT NULL,
-    ext_attributes JSONB,
-    schema_version VARCHAR(16),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    member_id VARCHAR(64) NOT NULL UNIQUE,          -- One-ID，雪花算法生成
+    name VARCHAR(100),                               -- 姓名（通用属性）
+    gender VARCHAR(10),                              -- MALE / FEMALE / UNKNOWN
+    birthday DATE,                                   -- 生日（通用属性）
+    tier_code VARCHAR(16),                           -- 当前等级代码
+    status VARCHAR(16) NOT NULL DEFAULT 'ENROLLED',  -- ENROLLED / SUSPENDED / MERGED / DEACTIVATED
+    schema_version VARCHAR(16),                      -- 写入该数据时的 Schema 版本号
+    ext_attributes JSONB,                             -- 动态扩展属性（渠道特有属性如天猫昵称）
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX idx_member_program ON member(program_code);
+CREATE INDEX idx_member_status ON member(program_code, status);
+CREATE INDEX idx_member_tier ON member(program_code, tier_code);
+CREATE INDEX idx_member_ext ON member USING GIN (ext_attributes);
 -- 3. 全渠道唯一键表 (One-ID 核心)
 CREATE TABLE member_unique_key (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGSERIAL,
     program_code VARCHAR(32) NOT NULL,
-    key_type VARCHAR(32) NOT NULL,
-    key_value VARCHAR(128) NOT NULL,
-    target_member_id VARCHAR(64) NOT NULL,
-    is_strong BOOLEAN DEFAULT true,
+    key_type VARCHAR(32) NOT NULL,                   -- 标识类型
+    key_value VARCHAR(256) NOT NULL,                 -- 标识值
+    target_member_id VARCHAR(64) NOT NULL,           -- 关联会员ID
+    is_strong BOOLEAN DEFAULT true,                  -- 是否可用于跨渠道 One-ID 匹配
+    is_verified BOOLEAN DEFAULT false,               -- 是否已验证（如手机号已验证）
     verified_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (program_code, key_type, key_value)
-);
+) PARTITION BY LIST (key_type);
+-- 热数据分区：明文手机（最频繁的跨渠道匹配查询）
+CREATE TABLE member_unique_key_mobile 
+    PARTITION OF member_unique_key 
+    FOR VALUES IN ('MOBILE_PLAIN');
+-- 温数据分区：各渠道强标识
+CREATE TABLE member_unique_key_wechat 
+    PARTITION OF member_unique_key 
+    FOR VALUES IN ('WECHAT_OPENID', 'WECHAT_UNIONID');
+CREATE TABLE member_unique_key_tmall 
+    PARTITION OF member_unique_key 
+    FOR VALUES IN ('TMALL_OUID');
+CREATE TABLE member_unique_key_jd 
+    PARTITION OF member_unique_key 
+    FOR VALUES IN ('JD_PIN');
+CREATE TABLE member_unique_key_douyin 
+    PARTITION OF member_unique_key 
+    FOR VALUES IN ('DOUYIN_OPENID');
+-- 冷数据分区：密文手机和掩码（几乎不用于查询，仅存储备查）
+CREATE TABLE member_unique_key_cold 
+    PARTITION OF member_unique_key 
+    FOR VALUES IN ('TMALL_MOBILE_MD5', 'JD_MOBILE_ENCRYPT', 'DOUYIN_MOBILE_MASK');
+-- 默认分区
+CREATE TABLE member_unique_key_other 
+    PARTITION OF member_unique_key DEFAULT;
+-- 反向查询索引：查某个会员的所有标识
+CREATE INDEX idx_muk_member ON member_unique_key(program_code, target_member_id);
 -- 4. 积分流水表 (分区表)
 CREATE TABLE account_transaction (
     id BIGSERIAL,
@@ -1562,15 +1655,14 @@ CREATE TABLE channel_adapter_config (
     transform_script TEXT,
     spi_webhook_url VARCHAR(500),
     auth_config JSONB,
-    api_entity_name VARCHAR(100),
-    request_schema JSONB,
-    response_schema JSONB,
-    cross_validations JSONB,
-    generated_controller BOOLEAN DEFAULT false,
     status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (program_code, channel)
 );
+-- mapping_mode	VISUAL（映射表）/ SCRIPT（脚本）
+-- transform_script	映射配置器产出的 GraalVM 映射脚本
+-- spi_webhook_url	渠道回调地址
+-- auth_config	认证配置（AppKey、Secret 等）
 -- 8. SPI 调用审计日志
 CREATE TABLE channel_spi_log (
     id BIGSERIAL PRIMARY KEY,
@@ -1626,13 +1718,12 @@ CREATE TABLE rule_snapshot (
 CREATE TABLE program_schema (
     id BIGSERIAL PRIMARY KEY,
     program_code VARCHAR(32) NOT NULL,
-    entity_type VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,         -- MEMBER / TRANSACTION_EVENT / API_ORDER_REQUEST
     version VARCHAR(16) NOT NULL,
-    field_schema JSONB NOT NULL,
-    entity_relations JSONB,
-    chartdb_data JSONB,
-    api_config JSONB,
-    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    field_schema JSONB NOT NULL,              -- Formily 可消费的 JSON Schema
+    entity_relations JSONB,                   -- 业务实体到系统实体的映射关系
+    api_config JSONB,                         -- API 实体的路由和校验配置
+    status VARCHAR(20) NOT NULL DEFAULT 'DRAFT', -- DRAFT / ACTIVE / DEPRECATED
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (program_code, entity_type, version)
 );
@@ -1640,3 +1731,17 @@ CREATE TABLE program_schema (
 CREATE INDEX idx_all_tables_program_code ON member(program_code);
 CREATE INDEX idx_all_tables_program_code_tx ON account_transaction(program_code, member_id);
 ```
+## 附录字典
+- member_unique_key表的key type值
+| key_type            | 示例值             | is_strong | 分区  | 说明                              |
+| -------------------- | --------------- | ---------- | --- | ------------------------------- |
+| `MOBILE_PLAIN`       | 13812345678     | ✅ true     | 热数据 | 明文手机（POS线下或抖音验证后获得），**跨渠道最强标识** |
+| `TMALL_OUID`         | tb123456        | ✅ true     | 温数据 | 天猫唯一ID                          |
+| `JD_PIN`             | jd_user_001   | ✅ true     | 温数据 | 京东唯一ID                          |
+| `WECHAT_OPENID`      | oxc123...       | ✅ true     | 温数据 | 微信openId                        |
+| `WECHAT_UNIONID`     | union123...     | ✅ true     | 温数据 | 微信unionId（同一开放平台下唯一）            |
+| `DOUYIN_OPENID`      | dy123...        | ✅ true     | 温数据 | 抖音用户ID（渠道内强标识）                  |
+| `TMALL_MOBILE_MD5`   | md5...          | ❌ false    | 冷数据 | 天猫双重MD5密文手机，**不可逆**，仅存储备查       |
+| `JD_MOBILE_ENCRYPT`  | enc...          | ❌ false    | 冷数据 | 京东密文手机，**不可逆**，仅存储备查            |
+| `DOUYIN_MOBILE_MASK` | 138****5678 | ❌ false    | 冷数据 | 抖音掩码手机，**不可匹配**，仅存储备查           |
+你帮我在梳理一下这个设计，把所有枚举值都整理到附录中，比如地址，省市的关联，男女等，

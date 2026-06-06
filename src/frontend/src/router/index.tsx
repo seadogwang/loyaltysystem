@@ -29,8 +29,8 @@ const SandboxTest = lazy(() => import('../pages/SandboxTest'));
 const ChannelList = lazy(() => import('../pages/ChannelList'));
 const MappingEditor = lazy(() => import('../pages/MappingEditor'));
 const ScriptingWorkbench = lazy(() => import('../components/ScriptingWorkbench/ScriptingWorkbench'));
-const SchemaBuilder = lazy(() => import('../components/SchemaBuilder/SchemaBuilder'));
-const EntityModeler = lazy(() => import('../components/EntityModeler/EntityModeler'));
+const SchemaEditor = lazy(() => import('../pages/SchemaEditor'));
+const MappingConfig = lazy(() => import('../pages/MappingConfig'));
 const DynamicRenderer = lazy(() => import('../components/DynamicRenderer/DynamicRenderer'));
 const RedemptionCancellation = lazy(() => import('../components/RedemptionCancellation'));
 const EventInbox = lazy(() => import('../pages/EventInbox'));
@@ -103,16 +103,12 @@ export const router = createBrowserRouter([
 
       // 数据建模
       {
-        path: 'modeling/entity',
-        element: <SuspenseWrapper><AuthGuard><EntityModeler /></AuthGuard></SuspenseWrapper>,
+        path: 'schema-editor',
+        element: <SuspenseWrapper><AuthGuard><SchemaEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
-        path: 'modeling/entity-legacy',
-        element: <SuspenseWrapper><AuthGuard><EntityModeler /></AuthGuard></SuspenseWrapper>,
-      },
-      {
-        path: 'modeling/schema',
-        element: <SuspenseWrapper><AuthGuard><SchemaBuilder entityType="MEMBER" /></AuthGuard></SuspenseWrapper>,
+        path: 'mapping-config',
+        element: <SuspenseWrapper><AuthGuard><MappingConfig /></AuthGuard></SuspenseWrapper>,
       },
 
       // 会员中心

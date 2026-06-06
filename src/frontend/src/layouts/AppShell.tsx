@@ -27,8 +27,8 @@ const menuItems: MenuItemType[] = [
   {
     key: 'modeling', icon: <BuildOutlined />, label: '数据建模',
     children: [
-      { key: 'db-designer', icon: <PartitionOutlined />, label: 'DB Schema 设计器', path: '/modeling/entity' },
-      { key: 'schema-designer', icon: <BuildOutlined />, label: '表单设计器', path: '/modeling/schema' },
+      { key: 'schema-editor', icon: <BuildOutlined />, label: 'Schema 编辑器', path: '/schema-editor' },
+      { key: 'mapping-config', icon: <ApiOutlined />, label: '映射配置器', path: '/mapping-config' },
     ],
   },
   {
