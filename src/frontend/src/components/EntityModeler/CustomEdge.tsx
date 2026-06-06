@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { EdgeLabelRenderer, useNodes, type EdgeProps, type Node } from '@xyflow/react';
+import { useNodes, type EdgeProps, type Node } from '@xyflow/react';
 import type { EntityNodeData, EntityEdgeData, EntityFieldExt } from './types';
 
 /** 字段行高 */
@@ -94,9 +94,6 @@ const CustomEdge: React.FC<EdgeProps> = ({
     ].join(' ');
   }, [srcX, srcAbsY, tgtX, tgtAbsY, sourceIsLeft]);
 
-  const labelX = (srcX + tgtX) / 2;
-  const labelY = (srcAbsY + tgtAbsY) / 2;
-
   return (
     <>
       {/* 透明宽交互路径 */}
@@ -118,18 +115,6 @@ const CustomEdge: React.FC<EdgeProps> = ({
       <text x={tgtX + (sourceIsLeft ? -14 : 14)} y={tgtAbsY + 3.5}
         textAnchor="middle" fontSize={8} fontWeight={600} fill="#fff"
         style={{ fontFamily: 'monospace' }}>{rightCard}</text>
-      {/* 关系类型标签 */}
-      {relType && (
-        <EdgeLabelRenderer>
-          <div style={{
-            position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-            fontSize: 10, color: edgeColor, pointerEvents: 'all',
-            background: '#fff', padding: '1px 6px', borderRadius: 3,
-            border: `1px solid ${edgeColor}`, fontFamily: 'monospace', fontWeight: 600,
-          }}>{relType}</div>
-        </EdgeLabelRenderer>
-      )}
     </>
   );
 };
