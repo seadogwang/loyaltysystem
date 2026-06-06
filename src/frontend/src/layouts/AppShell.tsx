@@ -25,13 +25,6 @@ interface MenuItemType {
 
 const menuItems: MenuItemType[] = [
   {
-    key: 'modeling', icon: <BuildOutlined />, label: '数据建模',
-    children: [
-      { key: 'schema-editor', icon: <BuildOutlined />, label: 'Schema 编辑器', path: '/schema-editor' },
-      { key: 'mapping-config', icon: <ApiOutlined />, label: '映射配置器', path: '/mapping-config' },
-    ],
-  },
-  {
     key: 'member', icon: <TeamOutlined />, label: '会员服务',
     children: [
       { key: 'member-list', icon: <TeamOutlined />, label: '会员列表', path: '/members' },
@@ -46,6 +39,8 @@ const menuItems: MenuItemType[] = [
   {
     key: 'settings', icon: <SettingOutlined />, label: '设置',
     children: [
+      { key: 'schema-editor', icon: <BuildOutlined />, label: 'Schema 编辑器', path: '/schema-editor' },
+      { key: 'mapping-config', icon: <ApiOutlined />, label: '映射配置器', path: '/mapping-config' },
       { key: 'points-grant', icon: <DollarOutlined />, label: '积分类型', path: '/points/grant' },
       { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers' },
       { key: 'channel-list', icon: <ApiOutlined />, label: '渠道列表', path: '/channels' },
