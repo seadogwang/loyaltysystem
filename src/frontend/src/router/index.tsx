@@ -17,6 +17,7 @@ const Dashboard = lazy(() => import('../pages/Dashboard'));
 const ProgramList = lazy(() => import('../pages/ProgramList'));
 const ProgramEdit = lazy(() => import('../pages/ProgramEdit'));
 const MemberList = lazy(() => import('../pages/MemberList'));
+const MemberService = lazy(() => import('../pages/MemberService'));
 const MemberDetail = lazy(() => import('../pages/MemberDetail'));
 const PointsAccounts = lazy(() => import('../pages/PointsAccounts'));
 const PointsTransactions = lazy(() => import('../pages/PointsTransactions'));
@@ -114,7 +115,7 @@ export const router = createBrowserRouter([
       // 会员中心
       {
         path: 'members',
-        element: <SuspenseWrapper><AuthGuard><MemberList /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard><MemberService /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'members/:id',
