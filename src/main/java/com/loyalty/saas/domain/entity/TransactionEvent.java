@@ -94,4 +94,7 @@ public class TransactionEvent {
 
     @Column(name = "order_amount", precision = 20, scale = 2)
     private BigDecimal orderAmount;
+
+    @Column(name = "trade_status", length = 30)
+    private String tradeStatus;
 }

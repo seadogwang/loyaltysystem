@@ -110,6 +110,7 @@ public class MemberController {
             m.put("orderTime", t.getTradeTime());
             m.put("payTime", t.getPayTime());
             m.put("orderAmount", t.getOrderAmount());
+            m.put("tradeStatus", t.getTradeStatus());
             m.put("eventType", t.getEventType());
             m.put("channel", t.getChannel());
             m.put("eventTime", t.getEventTime());
