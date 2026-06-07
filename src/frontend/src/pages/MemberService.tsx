@@ -9,7 +9,7 @@ const { Text, Title } = Typography;
 // ==================== 类型 ====================
 
 interface MemberVO {
-  memberId: number; tierCode: string; status: string;
+  memberId: string; tierCode: string; status: string;
   schemaVersion: string; createdAt: string;
   extAttributes?: Record<string, any>;
   accounts?: AccountVO[]; recentTransactions?: TxVO[];
@@ -185,12 +185,16 @@ const MemberService: React.FC = () => {
 
   const fetchTransactions = async (page: number, memberDataOrType?: MemberVO | string, type?: string) => {
     const memberData = typeof memberDataOrType === 'object' ? memberDataOrType : member;
-    if (!memberData) return;
+    console.log('[fetchTransactions] memberData:', memberData?.memberId, 'type:', typeof memberDataOrType);
+    if (!memberData) { console.log('[fetchTransactions] no memberData, return'); return; }
     setTxLoading(true);
     try {
-      const { data } = await api.get(`/members/${memberData.memberId}/transactions`, {
+      const url = `/members/${memberData.memberId}/transactions`;
+      console.log('[fetchTransactions] calling:', url);
+      const { data } = await api.get(url, {
         params: { page, size: 20, typeFilter: type || txTypeFilter },
       });
+      console.log('[fetchTransactions] response:', data?.code, 'count:', data?.data?.data?.length);
       if (data?.code === 'SUCCESS') {
         setTxData(data.data.data || []);
         setTxTotal(data.data.total || 0);

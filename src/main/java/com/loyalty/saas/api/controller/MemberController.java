@@ -291,7 +291,7 @@ public class MemberController {
 
     private Map<String, Object> toFullVO(Member m, String pc) {
         Map<String, Object> vo = new LinkedHashMap<>();
-        vo.put("memberId", m.getMemberId());
+        vo.put("memberId", String.valueOf(m.getMemberId()));
         vo.put("tierCode", m.getTierCode());
         vo.put("status", m.getStatus());
         vo.put("schemaVersion", m.getSchemaVersion());
