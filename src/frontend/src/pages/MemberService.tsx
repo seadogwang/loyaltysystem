@@ -403,22 +403,22 @@ const MemberService: React.FC = () => {
                       expandable={{
                         expandedRowRender: (r: OrderVO) => r.orderDetail ? (
                           <div style={{ padding: '8px 16px', background: '#fafafa' }}>
-                            <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+                            <table style={{ fontSize: 11, borderCollapse: 'collapse' }}>
                               <thead><tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-                                <th style={{ padding: '6px 8px', textAlign: 'left', color: '#666' }}>商品编号</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'left', color: '#666' }}>商品名称</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', color: '#666' }}>单价</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', color: '#666' }}>数量</th>
-                                <th style={{ padding: '6px 8px', textAlign: 'right', color: '#666' }}>小计</th>
+                                <th style={{ padding: '4px 6px', textAlign: 'left', color: '#666', width: 80 }}>商品编号</th>
+                                <th style={{ padding: '4px 6px', textAlign: 'left', color: '#666' }}>商品名称</th>
+                                <th style={{ padding: '4px 6px', textAlign: 'right', color: '#666', width: 60 }}>单价</th>
+                                <th style={{ padding: '4px 6px', textAlign: 'right', color: '#666', width: 40 }}>数量</th>
+                                <th style={{ padding: '4px 6px', textAlign: 'right', color: '#666', width: 70 }}>小计</th>
                               </tr></thead>
                               <tbody>
                                 {(r.orderDetail.items || []).map((item: any, i: number) => (
                                   <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                                    <td style={{ padding: '6px 8px', fontFamily: 'monospace' }}>{item.sku_id || '-'}</td>
-                                    <td style={{ padding: '6px 8px' }}>{item.title || '-'}</td>
-                                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{(item.price || 0).toLocaleString()}</td>
-                                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{item.qty || item.quantity || 1}</td>
-                                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 500 }}>{((item.price || 0) * (item.qty || 1)).toLocaleString()}</td>
+                                    <td style={{ padding: '3px 6px', fontFamily: 'monospace' }}>{item.sku_id || '-'}</td>
+                                    <td style={{ padding: '3px 6px' }}>{item.title || '-'}</td>
+                                    <td style={{ padding: '3px 6px', textAlign: 'right' }}>{(item.price || 0).toLocaleString()}</td>
+                                    <td style={{ padding: '3px 6px', textAlign: 'right' }}>{item.qty || 1}</td>
+                                    <td style={{ padding: '3px 6px', textAlign: 'right', fontWeight: 500 }}>{((item.price || 0) * (item.qty || 1)).toLocaleString()}</td>
                                   </tr>
                                 ))}
                               </tbody>
