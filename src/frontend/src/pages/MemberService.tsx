@@ -18,7 +18,7 @@ interface MemberVO {
 }
 
 interface AccountVO { accountType: string; balance: number; totalAccrued?: number; totalRedeemed?: number; creditLimit?: number; creditUsed?: number; }
-interface TxVO { id: number; transactionType: string; amount: number; remainingAmount?: number; description: string; orderId?: string; createdAt: string; }
+interface TxVO { id: number; transactionType: string; amount: number; remainingAmount?: number; description: string; orderId?: string; orderTime?: string; payTime?: string; createdAt: string; }
 interface TierLogVO { id: number; fromTier?: string; toTier: string; changeReason: string; changedAt: string; }
 interface ChannelVO { keyCombination: string; keyValue: string; }
 interface TierDefVO { tierCode: string; tierName: string; minPoints: number; maxPoints: number; sequence: number; }
@@ -253,17 +253,28 @@ const MemberService: React.FC = () => {
     return map[type] || type;
   }
 
-  const txColumns = [
+  const orderColumns = [
+    { title: '交易号', dataIndex: 'orderId', width: 200, ellipsis: true,
+      render: (v: string) => v ? <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{v}</span> : '-' },
+    { title: '下单时间', dataIndex: 'orderTime', width: 160, render: (v: string) => v?.substring(0, 19) || '-' },
+    { title: '支付时间', dataIndex: 'payTime', width: 160, render: (v: string) => v?.substring(0, 19) || '-' },
+    { title: '交易金额', dataIndex: 'amount', width: 120,
+      render: (v: number) => <span style={{ color: '#52c41a', fontWeight: 500 }}>+{(v || 0).toLocaleString()}</span> },
+    { title: '创建时间', dataIndex: 'createdAt', width: 160, render: (v: string) => v?.substring(0, 19) },
+  ];
+
+  const pointsColumns = [
     { title: '时间', dataIndex: 'createdAt', width: 160, render: (v: string) => v?.substring(0, 19) },
-    { title: '订单号', dataIndex: 'orderId', width: 180, ellipsis: true,
+    { title: '流水号', dataIndex: 'orderId', width: 180, ellipsis: true,
       render: (v: string) => v ? <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{v}</span> : '-' },
     { title: '类型', dataIndex: 'description', width: 90 },
-    { title: '变动积分', dataIndex: 'amount', width: 100,
+    { title: '变动积分', dataIndex: 'amount', width: 110,
       render: (v: number) => <span style={{ color: v > 0 ? '#52c41a' : v < 0 ? '#ff4d4f' : '#999', fontWeight: 500 }}>
-        {v > 0 ? '+' : ''}{(v || 0).toLocaleString()}</span>,
-    },
+        {v > 0 ? '+' : ''}{(v || 0).toLocaleString()}</span> },
+    { title: '余额', dataIndex: 'remainingAmount', width: 100,
+      render: (v: number) => v != null ? v.toLocaleString() : '-' },
     {
-      title: '操作', width: 60,
+      title: '', width: 50,
       render: (_: any, r: TxVO) => <Button size="small" type="link" style={{ fontSize: 11 }} onClick={() => fetchAllocation(r.id)}>溯源</Button>,
     },
   ];
@@ -351,9 +362,17 @@ const MemberService: React.FC = () => {
             <Tabs activeKey={activeTab} onChange={setActiveTab} style={{ padding: '0 16px' }}
               items={[
                 {
-                  key: 'transactions', label: <Space><HistoryOutlined />交易流水</Space>,
+                  key: 'orders', label: <Space><HistoryOutlined />交易流水</Space>,
                   children: (
-                    <Table dataSource={txData} columns={txColumns} rowKey="id" size="small"
+                    <Table dataSource={txData.filter(t => t.transactionType === 'ACCRUAL')} columns={orderColumns} rowKey="id" size="small"
+                      loading={txLoading} pagination={false}
+                      scroll={{ x: 800 }} locale={{ emptyText: '暂无订单记录' }} />
+                  ),
+                },
+                {
+                  key: 'transactions', label: <Space><HistoryOutlined />积分流水</Space>,
+                  children: (
+                    <Table dataSource={txData} columns={pointsColumns} rowKey="id" size="small"
                       loading={txLoading} pagination={{
                         total: txTotal, current: txPage + 1, pageSize: 20,
                         onChange: (p) => fetchTransactions(p - 1, member),

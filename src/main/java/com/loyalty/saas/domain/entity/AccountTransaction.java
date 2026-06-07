@@ -110,4 +110,10 @@ public class AccountTransaction implements Serializable {
     @Column(name = "updated_at")
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @Column(name = "order_time")
+    private LocalDateTime orderTime;
+
+    @Column(name = "pay_time")
+    private LocalDateTime payTime;
 }
