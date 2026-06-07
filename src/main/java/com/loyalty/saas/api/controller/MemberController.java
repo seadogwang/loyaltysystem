@@ -90,7 +90,39 @@ public class MemberController {
         return ResponseEntity.ok(ApiResponse.success("创建成功", m));
     }
 
-    // ==================== 交易流水 ====================
+    // ==================== 交易流水 (transaction_event) ====================
+
+    @GetMapping("/{memberId}/orders")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> orders(
+            @PathVariable Long memberId,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        String pc = TenantContext.getRequired();
+        String jpql = "FROM TransactionEvent t WHERE t.programCode=:pc AND t.memberId=:mid AND t.eventType IN ('ORDER_PAID','ORDER_REFUND_FULL','ORDER_REFUND_PARTIAL') ORDER BY t.eventTime DESC";
+        String cnt = "SELECT COUNT(t) FROM TransactionEvent t WHERE t.programCode=:pc AND t.memberId=:mid AND t.eventType IN ('ORDER_PAID','ORDER_REFUND_FULL','ORDER_REFUND_PARTIAL')";
+
+        var q = em.createQuery(jpql, TransactionEvent.class).setParameter("pc", pc).setParameter("mid", memberId);
+        var cq = em.createQuery(cnt, Long.class).setParameter("pc", pc).setParameter("mid", memberId);
+
+        long total = cq.getSingleResult();
+        var list = q.setFirstResult(page * size).setMaxResults(size).getResultList().stream().map(t -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("orderId", t.getIdempotencyKey());
+            m.put("orderTime", t.getOrderTime());
+            m.put("payTime", t.getPayTime());
+            m.put("orderAmount", t.getOrderAmount());
+            m.put("eventType", t.getEventType());
+            m.put("channel", t.getChannel());
+            m.put("eventTime", t.getEventTime());
+            m.put("createdAt", t.getCreatedAt());
+            return m;
+        }).collect(Collectors.toList());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("data", list); result.put("total", total);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    // ==================== 交易流水 (account_transaction) ====================
 
     @GetMapping("/{memberId}/transactions")
     public ResponseEntity<ApiResponse<Map<String, Object>>> transactions(

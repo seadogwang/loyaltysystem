@@ -21,6 +21,7 @@ interface AccountVO { accountType: string; balance: number; totalAccrued?: numbe
 interface TxVO { id: number; transactionType: string; amount: number; remainingAmount?: number; description: string; orderId?: string; orderTime?: string; payTime?: string; createdAt: string; }
 interface TierLogVO { id: number; fromTier?: string; toTier: string; changeReason: string; changedAt: string; }
 interface ChannelVO { keyCombination: string; keyValue: string; }
+interface OrderVO { orderId: string; orderTime: string; payTime: string; orderAmount: number; eventType: string; channel: string; eventTime: string; createdAt: string; }
 interface TierDefVO { tierCode: string; tierName: string; minPoints: number; maxPoints: number; sequence: number; }
 
 const TYPE_LABELS: Record<string, string> = { REWARD: '消费积分', TIER: '等级成长值', CREDIT: '授信积分' };
@@ -151,6 +152,11 @@ const MemberService: React.FC = () => {
   const [activeTab, setActiveTab] = useState('transactions');
 
   // 交易流水
+  const [orderData, setOrderData] = useState<OrderVO[]>([]);
+  const [orderTotal, setOrderTotal] = useState(0);
+  const [orderLoading, setOrderLoading] = useState(false);
+
+  // 积分流水
   const [txData, setTxData] = useState<TxVO[]>([]);
   const [txTotal, setTxTotal] = useState(0);
   const [txPage, setTxPage] = useState(0);
@@ -175,6 +181,7 @@ const MemberService: React.FC = () => {
       if (data?.code === 'SUCCESS' && data.data) {
         const memberData = data.data;
         setMember(memberData);
+        fetchOrders(0, memberData);
         fetchTransactions(0, memberData);
         fetchTierLogs(0, memberData);
       } else {
@@ -183,6 +190,19 @@ const MemberService: React.FC = () => {
     } catch (e: any) { setError(e.message || '查询失败'); }
     finally { setLoading(false); }
   }, [keyword]);
+
+  const fetchOrders = async (page: number, memberData: MemberVO) => {
+    if (!memberData) return;
+    setOrderLoading(true);
+    try {
+      const { data } = await api.get(`/members/${memberData.memberId}/orders`, { params: { page, size: 20 } });
+      if (data?.code === 'SUCCESS') {
+        setOrderData(data.data.data || []);
+        setOrderTotal(data.data.total || 0);
+      }
+    } catch (e: any) { /* ignore */ }
+    finally { setOrderLoading(false); }
+  };
 
   const fetchTransactions = async (page: number, memberDataOrType?: MemberVO | string, type?: string) => {
     const memberData = typeof memberDataOrType === 'object' && memberDataOrType !== null
@@ -364,9 +384,9 @@ const MemberService: React.FC = () => {
                 {
                   key: 'orders', label: <Space><HistoryOutlined />交易流水</Space>,
                   children: (
-                    <Table dataSource={txData.filter(t => t.transactionType === 'ACCRUAL')} columns={orderColumns} rowKey="id" size="small"
-                      loading={txLoading} pagination={false}
-                      scroll={{ x: 800 }} locale={{ emptyText: '暂无订单记录' }} />
+                    <Table dataSource={orderData} columns={orderColumns} rowKey="orderId" size="small"
+                      loading={orderLoading} pagination={false}
+                      scroll={{ x: 800 }} locale={{ emptyText: '暂无交易记录' }} />
                   ),
                 },
                 {

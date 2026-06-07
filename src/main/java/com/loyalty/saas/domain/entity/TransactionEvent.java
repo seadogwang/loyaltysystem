@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -84,4 +85,13 @@ public class TransactionEvent {
     @Column(name = "created_at", updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "order_time")
+    private LocalDateTime orderTime;
+
+    @Column(name = "pay_time")
+    private LocalDateTime payTime;
+
+    @Column(name = "order_amount", precision = 20, scale = 2)
+    private BigDecimal orderAmount;
 }
