@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Input, Button, Card, Tag, Space, Typography, Table, Tabs, Modal, Select, InputNumber, message, Empty, Spin, Progress, Row, Col } from 'antd';
 import { SearchOutlined, CopyOutlined, EditOutlined, DollarOutlined, CrownOutlined, LockOutlined, MergeCellsOutlined, HistoryOutlined, ApiOutlined } from '@ant-design/icons';
 import { useAppStore } from '../store';
@@ -157,6 +157,7 @@ const MemberService: React.FC = () => {
   const [txTypeFilter, setTxTypeFilter] = useState('');
   const [txLoading, setTxLoading] = useState(false);
   const [allocDrawer, setAllocDrawer] = useState<{ open: boolean; data: any[] }>({ open: false, data: [] });
+  const fetchReqId = useRef(0);
 
   // 等级日志
   const [tierData, setTierData] = useState<TierLogVO[]>([]);
@@ -184,17 +185,23 @@ const MemberService: React.FC = () => {
   }, [keyword]);
 
   const fetchTransactions = async (page: number, memberDataOrType?: MemberVO | string, type?: string) => {
-    // 明确获取 memberData：从参数或从 state
     const memberData = typeof memberDataOrType === 'object' && memberDataOrType !== null
       ? memberDataOrType : member;
     if (!memberData) return;
-    const filterType = typeof memberDataOrType === 'string' ? memberDataOrType : (type || txTypeFilter);
+    // 忽略 stale 请求
+    const reqId = ++fetchReqId.current;
+
+    // 只有显式传入 type 参数时才设置类型过滤器
+    const filterParam = typeof type === 'string' ? type : undefined;
+
     setTxLoading(true);
     try {
       const url = `/members/${memberData.memberId}/transactions`;
       const { data } = await api.get(url, {
-        params: { page, size: 20, typeFilter: filterType || undefined },
+        params: { page, size: 20, typeFilter: filterParam || undefined },
       });
+      // 忽略过期响应
+      if (reqId !== fetchReqId.current) return;
       if (data?.code === 'SUCCESS') {
         setTxData(data.data.data || []);
         setTxTotal(data.data.total || 0);
@@ -336,7 +343,7 @@ const MemberService: React.FC = () => {
           <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             {member.accounts?.map((a: AccountVO) => (
               <AccountCard key={a.accountType} acc={a} memberId={member.memberId}
-                tiers={member.tiers} onViewDetail={(tp) => { setTxTypeFilter(tp); setActiveTab('transactions'); fetchTransactions(0, undefined, tp); }} />
+                tiers={member.tiers} onViewDetail={() => setActiveTab('transactions')} />
             ))}
           </div>
 
