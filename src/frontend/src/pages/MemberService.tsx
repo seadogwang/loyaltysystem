@@ -19,7 +19,7 @@ interface MemberVO {
 
 interface AccountVO { accountType: string; balance: number; totalAccrued?: number; totalRedeemed?: number; creditLimit?: number; creditUsed?: number; }
 interface TxVO { id: number; transactionType: string; amount: number; remainingAmount?: number; description: string; createdAt: string; }
-interface TierLogVO { id: number; oldTier?: string; newTier: string; changeReason: string; changedAt: string; }
+interface TierLogVO { id: number; fromTier?: string; toTier: string; changeReason: string; changedAt: string; }
 interface ChannelVO { keyCombination: string; keyValue: string; }
 interface TierDefVO { tierCode: string; tierName: string; minPoints: number; maxPoints: number; sequence: number; }
 
@@ -247,7 +247,7 @@ const MemberService: React.FC = () => {
   const tierColumns = [
     { title: '时间', dataIndex: 'changedAt', width: 170, render: (v: string) => v?.substring(0, 19) },
     { title: '变更', width: 180,
-      render: (_: any, r: TierLogVO) => <span>{r.oldTier || '-'} <span style={{ color: '#1677ff' }}>→</span> {r.newTier}</span> },
+      render: (_: any, r: TierLogVO) => <span>{r.fromTier || '-'} <span style={{ color: '#1677ff' }}>→</span> {r.toTier}</span> },
     { title: '原因', dataIndex: 'changeReason', width: 140 },
   ];
 

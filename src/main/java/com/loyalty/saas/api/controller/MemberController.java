@@ -135,13 +135,13 @@ public class MemberController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> allocation(@PathVariable Long memberId, @PathVariable Long txId) {
         String pc = TenantContext.getRequired();
         List<RedemptionAllocation> allocs = em.createQuery(
-            "FROM RedemptionAllocation a WHERE a.programCode=:pc AND a.redemptionTxId=:txId",
+            "FROM RedemptionAllocation a WHERE a.programCode=:pc AND a.redemptionTransactionId=:txId",
             RedemptionAllocation.class).setParameter("pc", pc).setParameter("txId", txId).getResultList();
 
         List<Map<String, Object>> result = allocs.stream().map(a -> {
             Map<String, Object> m = new LinkedHashMap<>();
-            AccountTransaction batch = em.find(AccountTransaction.class, a.getAccrualTxId());
-            m.put("batchId", a.getAccrualTxId());
+            AccountTransaction batch = em.find(AccountTransaction.class, a.getAccrualTransactionId());
+            m.put("batchId", a.getAccrualTransactionId());
             m.put("batchCreatedAt", batch != null ? batch.getCreatedAt() : null);
             m.put("originalAmount", batch != null ? batch.getAmount() : null);
             m.put("allocatedAmount", a.getAllocatedAmount());
@@ -221,8 +221,8 @@ public class MemberController {
         String type = (String) body.getOrDefault("accountType", "REWARD");
         BigDecimal amount = new BigDecimal(body.get("amount").toString());
         boolean incr = Boolean.TRUE.equals(body.getOrDefault("increase", true));
-        if (incr) pointGrantService.grantPoints(pc, String.valueOf(memberId), type, amount, "MANUAL_ADJUST", null);
-        else pointRedeemService.redeemPoints(pc, String.valueOf(memberId), type, amount);
+        if (incr) pointGrantService.grantPoints(pc, memberId, type, amount, "MANUAL_ADJUST", null);
+        else pointRedeemService.redeemPoints(pc, memberId, type, amount);
         return ResponseEntity.ok(ApiResponse.success("调整成功", null));
     }
 
@@ -240,10 +240,10 @@ public class MemberController {
         memberRepo.save(m);
 
         TierChangeLog log = new TierChangeLog();
-        log.setProgramCode(pc); log.setMemberId(String.valueOf(memberId));
-        log.setOldTier(old); log.setNewTier(newTier);
-        log.setChangeReason("MANUAL_" + (tierSeq(newTier) > tierSeq(old) ? "UPGRADE" : "DOWNGRADE"));
-        log.setChangedAt(LocalDateTime.now()); log.setCreatedAt(LocalDateTime.now());
+        log.setProgramCode(pc); log.setMemberId(memberId);
+        log.setFromTier(old); log.setToTier(newTier);
+        log.setChangeReason("MANUAL_ADJUSTMENT");
+        log.setChangedAt(LocalDateTime.now());
         em.persist(log);
         return ResponseEntity.ok(ApiResponse.success("等级调整成功", null));
     }
@@ -304,7 +304,7 @@ public class MemberController {
         for (String type : new String[]{"REWARD", "TIER", "CREDIT"}) {
             Map<String, Object> acc = new LinkedHashMap<>();
             acc.put("accountType", type);
-            BigDecimal balance = txRepo.sumAvailableBalance(mid, type);
+            BigDecimal balance = txRepo.sumAvailableBalance(pc, m.getMemberId(), type);
             acc.put("balance", balance != null ? balance : BigDecimal.ZERO);
             try {
                 var mas = em.createQuery(
@@ -351,9 +351,8 @@ public class MemberController {
                 Map<String, Object> tm = new LinkedHashMap<>();
                 tm.put("tierCode", t.getTierCode());
                 tm.put("tierName", t.getTierName());
-                tm.put("minPoints", t.getMinPoints());
-                tm.put("maxPoints", t.getMaxPoints());
                 tm.put("sequence", t.getSequence());
+                tm.put("upgradeCriteria", t.getUpgradeCriteria());
                 return tm;
             }).collect(Collectors.toList()));
 
@@ -391,12 +390,5 @@ public class MemberController {
         if (v == null) return "";
         if (v.length() >= 7) return v.substring(0, 3) + "****" + v.substring(v.length() - 4);
         return "***";
-    }
-
-    private int tierSeq(String code) {
-        try {
-            return em.createQuery("SELECT t.sequence FROM TierDefinition t WHERE t.tierCode=:c", Integer.class)
-                .setParameter("c", code).getSingleResult();
-        } catch (Exception e) { return 0; }
     }
 }

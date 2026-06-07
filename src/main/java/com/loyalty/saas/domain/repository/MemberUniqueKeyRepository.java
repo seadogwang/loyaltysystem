@@ -12,9 +12,9 @@ import java.util.Optional;
 @Repository
 public interface MemberUniqueKeyRepository extends JpaRepository<MemberUniqueKey, Long> {
 
-    @Query("SELECT k.targetMemberId FROM MemberUniqueKey k WHERE k.programCode=:pc AND k.keyType=:type AND k.keyValue=:val")
-    Optional<String> findMemberId(@Param("pc") String programCode, @Param("type") String keyType, @Param("val") String keyValue);
+    List<MemberUniqueKey> findByProgramCodeAndKeyCombinationAndKeyValue(
+        @Param("pc") String programCode, @Param("kc") String keyCombination, @Param("kv") String keyValue);
 
-    @Query("SELECT k FROM MemberUniqueKey k WHERE k.programCode=:pc AND k.targetMemberId=:mid")
-    List<MemberUniqueKey> findByTargetMemberId(@Param("pc") String programCode, @Param("mid") String memberId);
+    List<MemberUniqueKey> findByProgramCodeAndMemberId(
+        @Param("pc") String programCode, @Param("mid") Long memberId);
 }
