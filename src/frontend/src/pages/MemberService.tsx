@@ -350,18 +350,25 @@ const MemberService: React.FC = () => {
           {/* 会员摘要卡片 */}
           <Card style={{ marginBottom: 16 }} bodyStyle={{ padding: 20 }}>
             <Row gutter={24}>
-              <Col span={12}>
+              <Col span={14}>
                 <Space direction="vertical" size={4}>
-                  <Space><Text strong style={{ fontSize: 16 }}>会员ID: {member.memberId}</Text>
+                  <Space>
+                    <Text strong style={{ fontSize: 16 }}>会员ID: {member.memberId}</Text>
+                    <Tag color={STATUS_COLOR[member.status] || 'default'}>{STATUS_LABEL[member.status] || member.status}</Tag>
                     <Button size="small" type="text" icon={<CopyOutlined />}
                       onClick={() => { navigator.clipboard.writeText(String(member.memberId)); message.success('已复制'); }} />
                   </Space>
-                  <Tag color={STATUS_COLOR[member.status] || 'default'}>{STATUS_LABEL[member.status] || member.status}</Tag>
+                  <Space size={16}>
+                    {member.extAttributes?.name && <Text style={{ fontSize: 13 }}>姓名: {member.extAttributes.name}</Text>}
+                    {member.extAttributes?.gender && <Text style={{ fontSize: 13 }}>性别: {member.extAttributes.gender === 'MALE' ? '男' : '女'}</Text>}
+                    {member.extAttributes?.birthday && <Text style={{ fontSize: 13 }}>生日: {member.extAttributes.birthday}</Text>}
+                    {member.extAttributes?.mobile && <Text style={{ fontSize: 13 }}>手机: {member.extAttributes.mobile}</Text>}
+                  </Space>
                   <Text style={{ fontSize: 13, color: '#666' }}>等级: <Tag color="gold">{member.tierCode}</Tag></Text>
                   <Text style={{ fontSize: 12, color: '#999' }}>注册时间: {member.createdAt?.substring(0, 10)}</Text>
                 </Space>
               </Col>
-              <Col span={12} style={{ textAlign: 'right' }}>
+              <Col span={10} style={{ textAlign: 'right' }}>
                 <Text strong style={{ fontSize: 28 }}>
                   {member.accounts?.reduce((s: number, a: AccountVO) => s + (a.accountType !== 'CREDIT' ? (a.balance || 0) : 0), 0).toLocaleString()}
                 </Text>
