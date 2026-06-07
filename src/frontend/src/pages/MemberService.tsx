@@ -172,9 +172,10 @@ const MemberService: React.FC = () => {
     try {
       const { data } = await api.get('/members/search', { params: { keyword: keyword.trim() } });
       if (data?.code === 'SUCCESS' && data.data) {
-        setMember(data.data);
-        fetchTransactions(0);
-        fetchTierLogs(0);
+        const memberData = data.data;
+        setMember(memberData);
+        fetchTransactions(0, memberData);
+        fetchTierLogs(0, memberData);
       } else {
         setError('未找到会员');
       }
@@ -182,11 +183,12 @@ const MemberService: React.FC = () => {
     finally { setLoading(false); }
   }, [keyword]);
 
-  const fetchTransactions = async (page: number, type?: string) => {
-    if (!member) return;
+  const fetchTransactions = async (page: number, memberDataOrType?: MemberVO | string, type?: string) => {
+    const memberData = typeof memberDataOrType === 'object' ? memberDataOrType : member;
+    if (!memberData) return;
     setTxLoading(true);
     try {
-      const { data } = await api.get(`/members/${member.memberId}/transactions`, {
+      const { data } = await api.get(`/members/${memberData.memberId}/transactions`, {
         params: { page, size: 20, typeFilter: type || txTypeFilter },
       });
       if (data?.code === 'SUCCESS') {
@@ -198,10 +200,11 @@ const MemberService: React.FC = () => {
     finally { setTxLoading(false); }
   };
 
-  const fetchTierLogs = async (page: number) => {
-    if (!member) return;
+  const fetchTierLogs = async (page: number, memberDataOrType?: MemberVO | string, type?: string) => {
+    const memberData = typeof memberDataOrType === 'object' ? memberDataOrType : member;
+    if (!memberData) return;
     try {
-      const { data } = await api.get(`/members/${member.memberId}/tier-logs`, { params: { page, size: 20 } });
+      const { data } = await api.get(`/members/${memberData.memberId}/tier-logs`, { params: { page, size: 20 } });
       if (data?.code === 'SUCCESS') {
         setTierData(data.data.data || []);
         setTierTotal(data.data.total || 0);
@@ -318,7 +321,7 @@ const MemberService: React.FC = () => {
           <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             {member.accounts?.map((a: AccountVO) => (
               <AccountCard key={a.accountType} acc={a} memberId={member.memberId}
-                tiers={member.tiers} onViewDetail={(type) => { setTxTypeFilter(type); setActiveTab('transactions'); fetchTransactions(0, type); }} />
+                tiers={member.tiers} onViewDetail={(tp) => { setTxTypeFilter(tp); setActiveTab('transactions'); fetchTransactions(0, undefined, tp); }} />
             ))}
           </div>
 
