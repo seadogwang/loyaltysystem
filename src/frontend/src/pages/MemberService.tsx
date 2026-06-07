@@ -21,7 +21,7 @@ interface AccountVO { accountType: string; balance: number; totalAccrued?: numbe
 interface TxVO { id: number; transactionType: string; amount: number; remainingAmount?: number; description: string; orderId?: string; orderTime?: string; payTime?: string; createdAt: string; }
 interface TierLogVO { id: number; fromTier?: string; toTier: string; changeReason: string; changedAt: string; }
 interface ChannelVO { keyCombination: string; keyValue: string; }
-interface OrderVO { orderId: string; orderTime: string; payTime: string; orderAmount: number; tradeStatus: string; eventType: string; channel: string; eventTime: string; createdAt: string; }
+interface OrderVO { orderId: string; orderTime: string; payTime: string; orderAmount: number; tradeStatus: string; orderDetail?: any; eventType: string; channel: string; eventTime: string; createdAt: string; }
 interface TierDefVO { tierCode: string; tierName: string; minPoints: number; maxPoints: number; sequence: number; }
 
 const TYPE_LABELS: Record<string, string> = { REWARD: '消费积分', TIER: '等级成长值', CREDIT: '授信积分' };
@@ -399,8 +399,37 @@ const MemberService: React.FC = () => {
                   key: 'orders', label: <Space><HistoryOutlined />交易流水</Space>,
                   children: (
                     <Table dataSource={orderData} columns={orderColumns} rowKey="orderId" size="small"
-                      loading={orderLoading} pagination={false}
-                      scroll={{ x: 800 }} locale={{ emptyText: '暂无交易记录' }} />
+                      loading={orderLoading} pagination={false} scroll={{ x: 800 }}
+                      expandable={{
+                        expandedRowRender: (r: OrderVO) => r.orderDetail ? (
+                          <div style={{ padding: '8px 16px', background: '#fafafa' }}>
+                            <Text strong style={{ fontSize: 12 }}>订单明细</Text>
+                            {r.orderDetail.items && (
+                              <table style={{ width: '100%', marginTop: 8, fontSize: 11, borderCollapse: 'collapse' }}>
+                                <thead><tr style={{ borderBottom: '1px solid #e0e0e0' }}>
+                                  <th style={{ padding: '4px 8px', textAlign: 'left' }}>商品</th>
+                                  <th style={{ padding: '4px 8px', textAlign: 'right' }}>单价</th>
+                                  <th style={{ padding: '4px 8px', textAlign: 'right' }}>数量</th>
+                                  <th style={{ padding: '4px 8px', textAlign: 'right' }}>小计</th>
+                                </tr></thead>
+                                <tbody>
+                                  {(r.orderDetail.items || []).map((item: any, i: number) => (
+                                    <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                      <td style={{ padding: '4px 8px' }}>{item.title || item.sku_id || '-'}</td>
+                                      <td style={{ padding: '4px 8px', textAlign: 'right' }}>{(item.price || 0).toLocaleString()}</td>
+                                      <td style={{ padding: '4px 8px', textAlign: 'right' }}>{item.qty || item.quantity || 1}</td>
+                                      <td style={{ padding: '4px 8px', textAlign: 'right' }}>{((item.price || 0) * (item.qty || item.quantity || 1)).toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                            {r.orderDetail.total_amount && <div style={{ marginTop: 8 }}><Text style={{ fontSize: 11 }}>总金额: <Text strong>{r.orderDetail.total_amount.toLocaleString()}</Text></Text></div>}
+                            {r.orderDetail.status && <div><Text style={{ fontSize: 11 }}>订单状态: {r.orderDetail.status}</Text></div>}
+                          </div>
+                        ) : <Text type="secondary" style={{ fontSize: 11 }}>暂无明细</Text>,
+                      }}
+                      locale={{ emptyText: '暂无交易记录' }} />
                   ),
                 },
                 {
