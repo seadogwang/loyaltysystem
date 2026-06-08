@@ -94,6 +94,11 @@ public class PointRedeemService {
                 .orElseThrow(() -> new BusinessException("ERR_ACCOUNT_NOT_FOUND",
                         "MemberAccount not found: " + programCode + "/" + memberId + "/" + accountType));
 
+        // 冻结检查
+        if ("FROZEN_ALL".equals(account.getFrozenStatus()) || "FROZEN_REDEMPTION".equals(account.getFrozenStatus())) {
+            throw new BusinessException("ERR_ACCOUNT_FROZEN", "账户已被冻结兑换权限");
+        }
+
         // 加载 CREDIT 账户（信用额度在独立账户上）
         MemberAccount creditAccount = accountRepo.findByMemberIdAndTypeForUpdate(
                 programCode, memberId, "CREDIT").orElse(null);
