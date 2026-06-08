@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Input, Button, Card, Tag, Space, Typography, Table, Tabs, Modal, Select, InputNumber, message, Empty, Spin, Progress, Row, Col } from 'antd';
 import { SearchOutlined, CopyOutlined, EditOutlined, DollarOutlined, CrownOutlined, LockOutlined, MergeCellsOutlined, HistoryOutlined, ApiOutlined } from '@ant-design/icons';
 import { useAppStore } from '../store';
@@ -26,7 +26,6 @@ interface TierDefVO { tierCode: string; tierName: string; minPoints: number; max
 
 const TYPE_LABELS: Record<string, string> = { REWARD: '消费积分', TIER: '等级成长值', CREDIT: '授信积分' };
 const STATUS_COLOR: Record<string, string> = { ENROLLED: 'green', FROZEN_REDEMPTION: 'red', MERGED: 'default', SUSPENDED: 'orange' };
-const STATUS_LABEL: Record<string, string> = { ENROLLED: '正常', FROZEN_REDEMPTION: '已冻结', MERGED: '已合并', SUSPENDED: '已停用' };
 
 // ==================== 子组件 ====================
 
@@ -145,6 +144,22 @@ const AdjustTierModal: React.FC<{ open: boolean; memberId: string; currentTier: 
 
 const MemberService: React.FC = () => {
   const programCode = useAppStore(s => s.currentProgramCode);
+  // 枚举缓存
+  const [enumCache, setEnumCache] = useState<Record<string, string>>({});
+  const enumName = (type: string, code: string) => enumCache[`${type}:${code}`] || code;
+
+  useEffect(() => {
+    api.get('/admin/cache/enums').then(({ data }: any) => {
+      if (data?.code === 'SUCCESS' && data.data?.enums) {
+        const map: Record<string, string> = {};
+        Object.entries(data.data.enums).forEach(([type, items]: [string, any]) => {
+          items.forEach((item: any) => { map[`${type}:${item.code}`] = item.name; });
+        });
+        setEnumCache(map);
+      }
+    }).catch(() => {});
+  }, []);
+
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
   const [member, setMember] = useState<MemberVO | null>(null);
@@ -291,7 +306,7 @@ const MemberService: React.FC = () => {
       render: (v: number) => <span style={{ color: v > 0 ? '#52c41a' : '#ff4d4f' }}>{v > 0 ? '+' : ''}{(v || 0).toLocaleString()}</span> },
     { title: '状态', dataIndex: 'tradeStatus', width: 90,
       render: (v: string) => {
-        const s = STATUS_MAP[v] || { label: v, color: 'default' };
+        const s = enumCache[`order_status:${v}`] ? { label: enumName('order_status', v), color: v === 'TRADE_FINISHED' ? 'green' : v?.includes('CLOSED') ? 'default' : v?.includes('WAIT') ? 'orange' : 'blue' } : { label: v, color: 'default' };
         return <Tag color={s.color} style={{ fontSize: 10 }}>{s.label}</Tag>;
       }},
     { title: '渠道', dataIndex: 'channel', width: 60 },
@@ -354,7 +369,7 @@ const MemberService: React.FC = () => {
                 <Space direction="vertical" size={4}>
                   <Space>
                     <Text strong style={{ fontSize: 16 }}>会员ID: {member.memberId}</Text>
-                    <Tag color={STATUS_COLOR[member.status] || 'default'}>{STATUS_LABEL[member.status] || member.status}</Tag>
+                    <Tag color={STATUS_COLOR[member.status] || 'default'}>{enumName('member_status', member.status)}</Tag>
                     <Button size="small" type="text" icon={<CopyOutlined />}
                       onClick={() => { navigator.clipboard.writeText(String(member.memberId)); message.success('已复制'); }} />
                   </Space>
