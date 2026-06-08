@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -105,8 +107,14 @@ public class PointRedeemService {
 
         final Long accountId = account.getAccountId();
 
-        // ---- Step 2: 实时汇总可用余额 ----
-        BigDecimal availableBalance = txRepo.sumAvailableBalance(programCode, memberId, accountType);
+        // ---- Step 2: FOR UPDATE 锁定所有有效批次（FIFO 排序） ----
+        List<AccountTransaction> validBatches = txRepo.findActiveBatchesForUpdate(
+                programCode, memberId, accountType);
+
+        // ---- Step 3: 在锁内计算自有余额并校验（修复 R-PTS-01 TOCTOU） ----
+        BigDecimal ownBalance = validBatches.stream()
+                .map(b -> b.getRemainingAmount() != null ? b.getRemainingAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 计算信用可用额度 = CREDIT 账户的 credit_limit - credit_used
         BigDecimal creditAvailable = BigDecimal.ZERO;
@@ -114,22 +122,18 @@ public class PointRedeemService {
             creditAvailable = creditAccount.getCreditLimit().subtract(creditAccount.getCreditUsed());
             if (creditAvailable.compareTo(BigDecimal.ZERO) < 0) creditAvailable = BigDecimal.ZERO;
         }
-        BigDecimal totalAvailable = availableBalance.add(creditAvailable);
+        BigDecimal totalAvailable = ownBalance.add(creditAvailable);
 
         if (totalAvailable.compareTo(pointsToRedeem) < 0) {
             throw new BusinessException("ERR_INSUFFICIENT_POINTS",
                     String.format("积分不足: 需要=%s, 可用=%s(自有)+%s(信用)",
                             pointsToRedeem.toPlainString(),
-                            availableBalance.toPlainString(),
+                            ownBalance.toPlainString(),
                             creditAvailable.toPlainString()));
         }
 
-        log.debug("[Redeem] 余额校验通过: available={}, credit={}, need={}",
-                availableBalance, creditAvailable, pointsToRedeem);
-
-        // ---- Step 3: FOR UPDATE 锁定所有有效批次（FIFO 排序） ----
-        List<AccountTransaction> validBatches = txRepo.findActiveBatchesForUpdate(
-                programCode, memberId, accountType);
+        log.debug("[Redeem] 余额校验通过(锁内): ownBalance={}, credit={}, need={}",
+                ownBalance, creditAvailable, pointsToRedeem);
 
         BigDecimal remainingToRedeem = pointsToRedeem;
 
@@ -239,10 +243,16 @@ public class PointRedeemService {
 
         log.info("[Redeem] 惰性过期标记: batchId={}, expiredAmount={}", batch.getId(), expiredAmount);
 
-        // 发布审计事件
+        // 发布审计事件 —— 必须在事务提交成功后执行，避免回滚后仍发送事件
         if (eventBridge != null) {
-            eventBridge.publish("loyalty-point-events", String.valueOf(memberId),
-                    new PointsExpiredEvent(programCode, memberId, expiredAmount, batch.getId(), accountType));
+            final Long finalBatchId = batch.getId();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    eventBridge.publish("loyalty-point-events", String.valueOf(memberId),
+                            new PointsExpiredEvent(programCode, memberId, expiredAmount, finalBatchId, accountType));
+                }
+            });
         }
     }
 

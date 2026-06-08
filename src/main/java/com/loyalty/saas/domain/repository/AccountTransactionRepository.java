@@ -77,4 +77,15 @@ public interface AccountTransactionRepository extends BaseRepository<AccountTran
                                                      @Param("mid") Long memberId,
                                                      @Param("atype") String accountType,
                                                      @Param("threshold") LocalDateTime threshold);
+
+    /**
+     * 级联重算：加载指定时间点之后的 ACCRUAL/REDEMPTION 流水（无锁，用于影子回放）。
+     * 按创建时间升序，确保时间轴回放顺序正确。
+     */
+    @Query("SELECT t FROM AccountTransaction t WHERE t.programCode = :pc AND t.memberId = :mid "
+            + "AND t.transactionType IN ('ACCRUAL', 'REDEMPTION') AND t.createdAt > :after "
+            + "ORDER BY t.createdAt ASC")
+    List<AccountTransaction> findTimelineAfter(@Param("pc") String programCode,
+                                               @Param("mid") Long memberId,
+                                               @Param("after") LocalDateTime after);
 }

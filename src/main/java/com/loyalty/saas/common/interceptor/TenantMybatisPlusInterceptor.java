@@ -6,6 +6,8 @@ import org.apache.ibatis.executor.statement.StatementHandler;
 import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.plugin.Intercepts;
 import org.apache.ibatis.plugin.Signature;
+import org.apache.ibatis.reflection.MetaObject;
+import org.apache.ibatis.reflection.SystemMetaObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,8 +43,8 @@ public class TenantMybatisPlusInterceptor implements InnerInterceptor {
     }
 
     /**
-     * 在 SQL 准备执行前，记录租户上下文的审计日志。
-     * 实际的租户过滤由 PostgreSQL RLS Policy 保证。
+     * 在 SQL 准备执行前，注入租户过滤条件。
+     * PostgreSQL RLS Policy 是第一道防线；本拦截器在 dev 环境（无 RLS）中提供应用层隔离。
      */
     @Override
     public void beforePrepare(StatementHandler sh, Connection connection, Integer transactionTimeout) {
@@ -64,12 +66,49 @@ public class TenantMybatisPlusInterceptor implements InnerInterceptor {
                     .anyMatch(table -> sql.toLowerCase().contains(table.toLowerCase()));
 
             if (containsMultiTenantTable && !sql.toLowerCase().contains("program_code")) {
-                log.debug("[TenantMybatisPlusInterceptor] 多租户表查询未包含 program_code 过滤条件，"
-                        + "依赖 RLS Policy 提供隔离: programCode={}", programCode);
+                String modifiedSql = injectTenantFilter(sql, programCode);
+                MetaObject metaObject = SystemMetaObject.forObject(boundSql);
+                metaObject.setValue("sql", modifiedSql);
+                log.debug("[TenantMybatisPlusInterceptor] 已注入租户过滤: programCode={}", programCode);
             }
         } catch (Exception e) {
-            log.debug("[TenantMybatisPlusInterceptor] SQL 分析异常（不影响业务）: {}", e.getMessage());
+            log.warn("[TenantMybatisPlusInterceptor] SQL 租户注入异常（不影响业务，降级依赖 RLS）: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 在 SQL 语句中注入 program_code 过滤条件。
+     *
+     * <p>使用转义（而非参数化绑定）适用于 InnerInterceptor 无法直接操作
+     * PreparedStatement 参数的限制。在 dev 环境足以满足安全需求，
+     * 生产环境有 PostgreSQL RLS Policy 作为最终防线。
+     */
+    String injectTenantFilter(String sql, String programCode) {
+        String escapedCode = programCode.replace("'", "''");
+        String tenantCondition = "program_code = '" + escapedCode + "'";
+
+        // 找到 ORDER BY / GROUP BY / HAVING / LIMIT / UNION 的位置作为插入锚点
+        int insertIdx = findKeywordInsertPoint(sql);
+        String upperSql = sql.toUpperCase();
+
+        if (upperSql.contains("WHERE")) {
+            return sql.substring(0, insertIdx) + " AND " + tenantCondition + " " + sql.substring(insertIdx);
+        } else {
+            return sql.substring(0, insertIdx) + " WHERE " + tenantCondition + " " + sql.substring(insertIdx);
+        }
+    }
+
+    /** 找到 SQL 后缀关键词（ORDER BY 等）之前的位置作为条件注入锚点 */
+    private int findKeywordInsertPoint(String sql) {
+        String upper = sql.toUpperCase();
+        int idx = sql.length();
+        for (String kw : new String[]{"ORDER BY", "GROUP BY", "HAVING", "LIMIT", "OFFSET", "UNION", "FOR UPDATE"}) {
+            int pos = upper.lastIndexOf(kw);
+            if (pos > 0 && pos < idx) {
+                idx = pos;
+            }
+        }
+        return idx;
     }
 
     /**

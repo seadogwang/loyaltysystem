@@ -2,6 +2,7 @@ package com.loyalty.saas.cascade;
 
 import com.loyalty.saas.common.context.TenantContext;
 import com.loyalty.saas.domain.entity.*;
+import com.loyalty.saas.domain.entity.MemberAccount;
 import com.loyalty.saas.domain.repository.*;
 import com.loyalty.saas.accounting.PointRedeemService;
 import com.loyalty.saas.accounting.PointGrantService;
@@ -115,7 +116,7 @@ public class CascadeRecalculationEngine {
 
                 // 计算该事件在当前等级下应得的积分
                 // 实际生产环境：调用 ruleEngine.evaluate(shadow, event, snapshot)
-                BigDecimal recalculated = recalculatePoints(tx, shadow.getCurrentTier());
+                BigDecimal recalculated = recalculatePoints(programCode, tx, shadow.getCurrentTier());
                 BigDecimal original = tx.getAmount() != null ? tx.getAmount() : BigDecimal.ZERO;
                 BigDecimal diff = recalculated.subtract(original);
 
@@ -287,12 +288,12 @@ public class CascadeRecalculationEngine {
 
     private List<AccountTransaction> loadTimelineTransactions(String programCode, Long memberId,
                                                                LocalDateTime after) {
-        // 简化为按时间排序查询 ACCRUAL 类型的流水
-        // 实际应从 transaction_event → account_transaction 关联查询
-        return List.of(); // 骨架：实际实现需从 event 表关联加载
+        // 从 account_transaction 加载 reverseTime 之后的 ACCRUAL/REDEMPTION 流水
+        // 用于影子回放：按时间升序重算每笔交易在当前等级下应得的积分
+        return txRepo.findTimelineAfter(programCode, memberId, after);
     }
 
-    private BigDecimal recalculatePoints(AccountTransaction tx, String currentTier) {
+    private BigDecimal recalculatePoints(String programCode, AccountTransaction tx, String currentTier) {
         // 简化的重算逻辑：实际应调用 RuleEngine.evaluate(shadow, event, snapshot)
         BigDecimal base = tx.getAmount() != null ? tx.getAmount().abs() : BigDecimal.ZERO;
         // 示例：金卡双倍
@@ -303,10 +304,41 @@ public class CascadeRecalculationEngine {
     }
 
     private AccountDelta calculateDelta(String programCode, Long memberId, ShadowContext shadow) {
-        // 对比影子推演结果与当前真实状态
-        AccountDelta delta = new AccountDelta(new BigDecimal("0.0000"), new BigDecimal("0.0000"),
-                null, null, shadow.getShadowTransactions().size());
-        log.debug("[Cascade] Delta: shadowBalance={}", shadow.getShadowBalance());
+        // 获取当前真实账户余额（ACTIVE 批次 remaining_amount 之和）
+        BigDecimal realBalance = txRepo.sumAvailableBalance(programCode, memberId, "REWARD_POINTS");
+
+        BigDecimal shadowBalance = shadow.getShadowBalance();
+        BigDecimal diff = shadowBalance.subtract(realBalance);
+
+        // diff > 0: 影子推演余额高于真实余额 → 需要补发积分
+        // diff < 0: 影子推演余额低于真实余额 → 需要追回积分
+        BigDecimal pointsToDeduct = BigDecimal.ZERO;
+        BigDecimal pointsToAdd = BigDecimal.ZERO;
+        if (diff.compareTo(BigDecimal.ZERO) < 0) {
+            pointsToDeduct = diff.abs().setScale(SCALE, RoundingMode.HALF_UP);
+        } else if (diff.compareTo(BigDecimal.ZERO) > 0) {
+            pointsToAdd = diff.setScale(SCALE, RoundingMode.HALF_UP);
+        }
+
+        // 等级变更检查：对比当前真实等级与影子推演结束时的等级
+        String shadowEndTier = shadow.getCurrentTier();
+        String realTier = accountRepo.findByMemberIdAndType(programCode, memberId, "REWARD_POINTS")
+                .map(MemberAccount::getAccountType)
+                .orElse(null);
+        // 使用影子推演的最终等级作为新等级（仅当与旧等级不同时触发修改）
+        String newTier = null;
+        String oldTier = null;
+        if (shadowEndTier != null && !shadowEndTier.equals(realTier)) {
+            // 影子推演得出不同等级 → 需要修正
+            oldTier = realTier;
+            newTier = shadowEndTier;
+        }
+
+        AccountDelta delta = new AccountDelta(pointsToDeduct, pointsToAdd, newTier, oldTier,
+                shadow.getShadowTransactions().size());
+
+        log.debug("[Cascade] Delta 计算: shadowBalance={}, realBalance={}, deduct={}, add={}, tierChange={}→{}",
+                shadowBalance, realBalance, pointsToDeduct, pointsToAdd, oldTier, newTier);
         return delta;
     }
 

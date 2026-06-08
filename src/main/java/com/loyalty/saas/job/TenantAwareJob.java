@@ -66,10 +66,11 @@ public abstract class TenantAwareJob {
             // 【安全红线】手动设置租户上下文
             TenantContext.set(programCode);
             try {
-                // 设置 PostgreSQL RLS 上下文
+                // 设置 PostgreSQL RLS 上下文（参数化查询，防 SQL 注入）
                 em.createNativeQuery(
-                        "SET app.current_program_code = '" + programCode + "'")
-                        .executeUpdate();
+                        "SELECT set_config('app.current_program_code', :code, false)")
+                        .setParameter("code", programCode)
+                        .getSingleResult();
 
                 perTenantLogic.accept(programCode);
                 successCount++;
@@ -79,6 +80,11 @@ public abstract class TenantAwareJob {
                 log.error("[{}] 租户 [{}] 处理异常", getJobName(), programCode, e);
             } finally {
                 // 【安全红线】finally 块中严格清理 ThreadLocal，防止线程池复用污染
+                try {
+                    em.createNativeQuery("RESET app.current_program_code").executeUpdate();
+                } catch (Exception ignored) {
+                    // RESET 可能因事务已回滚而失败，忽略以允许继续清理
+                }
                 TenantContext.clear();
             }
         }

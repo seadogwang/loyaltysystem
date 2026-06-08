@@ -9,25 +9,35 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.Set;
 
+/**
+ * MyBatis-Plus 配置。
+ *
+ * <p>注册 {@link TenantMybatisPlusInterceptor} 作为内部拦截器，
+ * 实现 MyBatis SQL 层面的租户审计日志。
+ *
+ * <p>多租户表列表由 {@link TenantProperties} 统一管理，
+ * 来源于 application.yml 的 {@code loyalty.tenant.multi-tenant-tables}，
+ * 与 {@link HibernateInterceptorConfig} 共享同一个配置源。
+ */
 @Configuration
 public class MybatisPlusConfig {
 
     private static final Logger log = LoggerFactory.getLogger(MybatisPlusConfig.class);
 
-    private static final Set<String> MULTI_TENANT_TABLES = Set.of(
-            "program", "member", "member_unique_key", "account_transaction",
-            "redemption_allocation", "member_account", "channel_adapter_config",
-            "event_inbox", "tier_change_log", "rule_snapshot",
-            "transaction_event", "rule_definition", "member_tier", "tenant"
-    );
+    private final TenantProperties tenantProperties;
+
+    public MybatisPlusConfig(TenantProperties tenantProperties) {
+        this.tenantProperties = tenantProperties;
+    }
 
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
+        Set<String> tables = tenantProperties.getMultiTenantTables();
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
         TenantMybatisPlusInterceptor tenantInterceptor =
-                new TenantMybatisPlusInterceptor(MULTI_TENANT_TABLES);
+                new TenantMybatisPlusInterceptor(tables);
         interceptor.addInnerInterceptor(tenantInterceptor);
-        log.info("[MybatisPlusConfig] Tenant SQL interceptor registered, tables: {}", MULTI_TENANT_TABLES);
+        log.info("[MybatisPlusConfig] Tenant SQL interceptor registered, tables: {}", tables);
         return interceptor;
     }
 }

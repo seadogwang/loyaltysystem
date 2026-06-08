@@ -95,8 +95,10 @@ public class CompactionService {
         }
 
         // 创建合并后的新批次
+        Long accountId = batches.get(0).getAccountId();
         AccountTransaction merged = AccountTransaction.builder()
                 .programCode(programCode)
+                .accountId(accountId)
                 .memberId(memberId)
                 .accountType(accountType)
                 .transactionType("ACCRUAL")

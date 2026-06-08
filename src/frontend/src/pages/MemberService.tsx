@@ -423,6 +423,16 @@ const MemberService: React.FC = () => {
 
   return (
     <div style={{ background: '#fff', minHeight: 'calc(100vh - 120px)', padding: 24, maxWidth: 1200, margin: '0 auto' }}>
+      <style>{`
+        /* 搜索框获焦时，去掉蓝色外发光，改用黑色边框，保持与按钮高度一致 */
+        .member-search-input .ant-input:focus {
+          border-color: #1a1a1a !important;
+          box-shadow: none !important;
+        }
+        .member-search-input .ant-input:hover {
+          border-color: #1a1a1a !important;
+        }
+      `}</style>
       {/* 搜索栏 */}
       <Card size="small" style={{ marginBottom: 16 }} bodyStyle={{ padding: 16 }}>
         <Space>
@@ -440,6 +450,7 @@ const MemberService: React.FC = () => {
                 onSearch={(v) => performSearch(v)}
                 enterButton={<><SearchOutlined /> 查询</>}
                 loading={loading}
+                className="member-search-input"
               />
             </AutoComplete>
         </Space>

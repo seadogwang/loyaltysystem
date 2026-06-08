@@ -43,7 +43,8 @@ public class SpiGatewayController {
 
     private static final Logger log = LoggerFactory.getLogger(SpiGatewayController.class);
 
-    /** SPI 处理专用线程池：隔离第三方调用，防止耗尽主线程池 */
+    /** SPI 请求体最大大小：1MB，防止 OOM */
+    private static final int MAX_BODY_SIZE = 1_048_576; // 1MB
     private ExecutorService spiThreadPool;
 
     private final SpiHandlerFactory handlerFactory;
@@ -171,13 +172,27 @@ public class SpiGatewayController {
         }
     }
 
-    /** 安全读取请求体为字节数组 */
+    /** 安全读取请求体为字节数组，超过 MAX_BODY_SIZE 时截断并告警 */
     private byte[] readBody(HttpServletRequest request) {
         try (InputStream is = request.getInputStream();
              ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
             byte[] buf = new byte[4096];
             int len;
-            while ((len = is.read(buf)) != -1) bos.write(buf, 0, len);
+            int total = 0;
+            while ((len = is.read(buf)) != -1) {
+                total += len;
+                if (total > MAX_BODY_SIZE) {
+                    log.warn("[SpiGateway] 请求体超过大小限制 {} bytes，已截断: uri={}",
+                            MAX_BODY_SIZE, request.getRequestURI());
+                    // 写入截至 MAX_BODY_SIZE 的剩余字节后截断
+                    int allowed = len - (total - MAX_BODY_SIZE);
+                    if (allowed > 0) {
+                        bos.write(buf, 0, allowed);
+                    }
+                    break;
+                }
+                bos.write(buf, 0, len);
+            }
             return bos.toByteArray();
         } catch (IOException e) {
             log.error("[SpiGateway] 读取请求体失败", e);

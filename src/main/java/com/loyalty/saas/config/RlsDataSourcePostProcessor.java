@@ -69,7 +69,7 @@ public class RlsDataSourcePostProcessor implements BeanPostProcessor {
             String programCode = TenantContext.get();
             if (programCode != null) {
                 try (Statement stmt = conn.createStatement()) {
-                    stmt.execute("SET app.current_program_code = '"
+                    stmt.execute("SET LOCAL app.current_program_code = '"
                             + programCode.replace("'", "''") + "'");
                 } catch (SQLException e) {
                     log.error("[RLS] 设置 app.current_program_code 失败: {}", programCode, e);
