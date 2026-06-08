@@ -1,13 +1,16 @@
 package com.loyalty.saas.common.cache;
 
+import com.loyalty.saas.common.context.TenantContext;
 import com.loyalty.saas.domain.entity.*;
-import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,13 +34,15 @@ public class SystemCacheService {
     @Getter
     private final Map<String, List<Map<String, String>>> enums = new ConcurrentHashMap<>();
 
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void init() {
-        log.info("[SystemCache] 初始化缓存...");
-        loadProgramDefs();
-        loadEnums();
-        log.info("[SystemCache] 缓存初始化完成: {} programs, {} enum types",
-            programDefs.size(), enums.size());
+        log.info("[SystemCache] Loading cache...");
+        try {
+            em.createNativeQuery("SELECT set_config('app.current_program_code', 'PROG001', false)").getSingleResult();
+            loadProgramDefs();
+            loadEnums();
+        } catch (Exception e) { log.error("[SystemCache] Load failed", e); }
+        log.info("[SystemCache] Done: {} programs, {} enum types", programDefs.size(), enums.size());
     }
 
     private void loadProgramDefs() {
