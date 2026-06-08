@@ -333,11 +333,17 @@ public class MemberController {
         vo.put("extAttributes", m.getExtAttributes());
         String mid = String.valueOf(m.getMemberId());
 
-        // 积分账户
+        // 积分账户 — 从 point_type_definition 读取类型名称
         List<Map<String, Object>> accounts = new ArrayList<>();
-        for (String type : new String[]{"REWARD", "TIER", "CREDIT"}) {
+        List<PointTypeDefinition> pointTypes = em.createQuery(
+            "FROM PointTypeDefinition p WHERE p.programCode=:pc AND p.status='ACTIVE'",
+            PointTypeDefinition.class).setParameter("pc", pc).getResultList();
+
+        for (PointTypeDefinition pt : pointTypes) {
+            String type = pt.getTypeCode();
             Map<String, Object> acc = new LinkedHashMap<>();
             acc.put("accountType", type);
+            acc.put("typeName", pt.getTypeName());
             BigDecimal balance = txRepo.sumAvailableBalance(pc, m.getMemberId(), type);
             acc.put("balance", balance != null ? balance : BigDecimal.ZERO);
             try {

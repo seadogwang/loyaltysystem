@@ -17,7 +17,7 @@ interface MemberVO {
   tiers?: TierDefVO[]; fieldSchema?: any;
 }
 
-interface AccountVO { accountType: string; balance: number; totalAccrued?: number; totalRedeemed?: number; creditLimit?: number; creditUsed?: number; }
+interface AccountVO { accountType: string; typeName?: string; balance: number; totalAccrued?: number; totalRedeemed?: number; creditLimit?: number; creditUsed?: number; }
 interface TxVO { id: number; transactionType: string; amount: number; remainingAmount?: number; description: string; orderId?: string; orderTime?: string; payTime?: string; createdAt: string; }
 interface TierLogVO { id: number; fromTier?: string; toTier: string; changeReason: string; changedAt: string; }
 interface ChannelVO { keyCombination: string; keyValue: string; }
@@ -41,7 +41,7 @@ const AccountCard: React.FC<{ acc: AccountVO; memberId: string; tiers?: TierDefV
 
   return (
     <Card size="small" style={{ flex: 1, minWidth: 180 }} bodyStyle={{ padding: 16 }}>
-      <Text strong style={{ fontSize: 13 }}>{TYPE_LABELS[acc.accountType] || acc.accountType}</Text>
+      <Text strong style={{ fontSize: 13 }}>{acc.typeName || acc.accountType}</Text>
       <div style={{ marginTop: 8 }}>
         {isCredit ? (
           <>
