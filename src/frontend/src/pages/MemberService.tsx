@@ -67,8 +67,6 @@ const AccountCard: React.FC<{ acc: AccountVO; memberId: string; tiers?: TierDefV
           </>
         )}
       </div>
-      <Button size="small" type="link" style={{ padding: 0, fontSize: 11, marginTop: 8 }}
-        onClick={() => onViewDetail(acc.accountType)}>查看明细</Button>
     </Card>
   );
 };
@@ -453,7 +451,7 @@ const MemberService: React.FC = () => {
           <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             {member.accounts?.map((a: AccountVO) => (
               <AccountCard key={a.accountType} acc={a} memberId={member.memberId}
-                tiers={member.tiers} onViewDetail={() => setActiveTab('transactions')} />
+                tiers={member.tiers} onViewDetail={() => {}} />
             ))}
           </div>
 
