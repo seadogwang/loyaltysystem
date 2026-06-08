@@ -45,7 +45,7 @@ public class DouyinSpiHandler implements ChannelSpiHandler {
             String body = new String(rawBody, StandardCharsets.UTF_8);
             Map<String, Object> payload = mapper.readValue(body, Map.class);
             String idemKey = programCode + ":DOUYIN:" + action + ":" + System.currentTimeMillis();
-            if (inboxRepo.findByIdempotencyKey(idemKey).isPresent())
+            if (inboxRepo.findByIdempotencyKey(programCode, idemKey).isPresent())
                 return Map.of("err_no", 0, "message", "ok");
             inboxRepo.save(EventInbox.builder()
                     .programCode(programCode).sourceChannel("DOUYIN")

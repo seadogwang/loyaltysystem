@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
  * <ul>
  *   <li>停止扣减，只扣至允许的透支极限</li>
  *   <li>生成追偿工单写入 negative_pending 表</li>
- *   <li>标记会员状态为 SUSPENDED（禁止兑换）</li>
+ *   <li>标记会员账户冻结状态为 FROZEN_REDEMPTION（禁止兑换）</li>
  * </ul>
  *
  * <p>未来新入账积分通过瀑布流冲抵 (PointGrantService Step-1)
@@ -90,7 +90,7 @@ public class NegativePendingService {
 
     private void suspendRedemption(String programCode, Long memberId) {
         em.createNativeQuery(
-                "UPDATE member SET status = 'SUSPENDED' WHERE program_code = ? AND member_id = ? AND status = 'ENROLLED'")
+                "UPDATE member_account SET frozen_status = 'FROZEN_REDEMPTION' WHERE program_code = ? AND member_id = ? AND frozen_status = 'ACTIVE'")
                 .setParameter(1, programCode)
                 .setParameter(2, memberId)
                 .executeUpdate();
@@ -109,7 +109,7 @@ public class NegativePendingService {
                 .executeUpdate();
         if (cleared > 0) {
             em.createNativeQuery(
-                    "UPDATE member SET status = 'ENROLLED' WHERE member_id = ? AND status = 'SUSPENDED'")
+                    "UPDATE member_account SET frozen_status = 'ACTIVE' WHERE member_id = ? AND frozen_status = 'FROZEN_REDEMPTION'")
                     .setParameter(1, memberId)
                     .executeUpdate();
             log.info("[NegativePending] 债务已还清，恢复兑换: member={}", memberId);

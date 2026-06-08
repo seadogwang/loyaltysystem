@@ -80,7 +80,7 @@ class SpiFullChainIntegrationTest {
         assertEquals("SUCCESS", ((Map<?,?>) result).get("code"));
 
         em.flush(); em.clear();
-        var list = inboxRepo.findByStatus("RECEIVED", 50);
+        var list = inboxRepo.findByStatus(PROG, "RECEIVED", 50);
         var saved = list.stream().filter(e -> CH.equals(e.getSourceChannel())).findFirst();
         assertTrue(saved.isPresent());
         EventInbox inbox = saved.get();
@@ -93,7 +93,7 @@ class SpiFullChainIntegrationTest {
         inbox.setStatus("SUCCEEDED"); inbox.setProcessedAt(LocalDateTime.now());
         inboxRepo.save(inbox); em.flush(); em.clear();
 
-        assertTrue(inboxRepo.existsByIdempotencyKeyAndStatus(inbox.getIdempotencyKey(), "SUCCEEDED"));
+        assertTrue(inboxRepo.existsByIdempotencyKeyAndStatus(PROG, inbox.getIdempotencyKey(), "SUCCEEDED"));
     }
 
     @Test @Order(2)
@@ -109,11 +109,11 @@ class SpiFullChainIntegrationTest {
         em.flush(); createdIds.add(inbox.getId());
 
         // 直接从 DB 验证已存在的 TRANSFORM_FAILED 状态
-        var retryable = inboxRepo.findRetryable(5, LocalDateTime.now().plusSeconds(10));
+        var retryable = inboxRepo.findRetryable(PROG, 5, LocalDateTime.now().plusSeconds(10));
         // retryable 要求 nextRetryAt < now，我们的记录 nextRetryAt 默认为 null
         // 所以走 exhausted 查询
 
-        var exhausted = inboxRepo.findExhaustedRetries(3);
+        var exhausted = inboxRepo.findExhaustedRetries(PROG, 3);
         assertFalse(exhausted.isEmpty(), "应有重试耗尽的记录");
 
         // moveToDead 执行
@@ -144,7 +144,7 @@ class SpiFullChainIntegrationTest {
                 .firstSeenAt(LocalDateTime.now()).processedAt(LocalDateTime.now()).build());
         em.flush(); createdIds.add(jd.getId());
 
-        assertTrue(inboxRepo.existsByIdempotencyKeyAndStatus(idemKey, "SUCCEEDED"));
+        assertTrue(inboxRepo.existsByIdempotencyKeyAndStatus(PROG, idemKey, "SUCCEEDED"));
 
         var tmallDup = inboxRepo.save(EventInbox.builder()
                 .programCode(PROG).sourceChannel(CH).sourceEventId("CHAIN-003-TMALL")

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.Objects;
 
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
@@ -40,4 +41,23 @@ public class MemberUniqueKey implements Serializable {
     /** 指向的会员主键 member.member_id */
     @Column(name = "member_id", nullable = false)
     private Long memberId;
+
+    /** 是否强绑定标识 */
+    @Builder.Default
+    @Column(name = "is_strong")
+    private Boolean isStrong = true;
+
+    /** 是否已验证 */
+    @Builder.Default
+    @Column(name = "is_verified")
+    private Boolean isVerified = false;
+
+    /** 验证时间 */
+    @Column(name = "verified_at")
+    private LocalDateTime verifiedAt;
+
+    /** 创建时间 */
+    @Builder.Default
+    @Column(name = "created_at")
+    private LocalDateTime createdAt = LocalDateTime.now();
 }

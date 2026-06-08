@@ -66,7 +66,7 @@ public class JdSpiHandler implements ChannelSpiHandler {
             Map<String, Object> payload = mapper.readValue(bodyStr, Map.class);
             String idemKey = programCode + ":JD:" + action + ":" + System.currentTimeMillis();
 
-            if (inboxRepo.findByIdempotencyKey(idemKey).isPresent()) {
+            if (inboxRepo.findByIdempotencyKey(programCode, idemKey).isPresent()) {
                 return jdResponse("SUCCESS", "ok (idempotent)");
             }
 

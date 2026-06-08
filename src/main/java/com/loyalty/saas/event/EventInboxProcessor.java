@@ -5,8 +5,10 @@ import com.loyalty.saas.common.event.EventBridge;
 import com.loyalty.saas.domain.entity.ChannelAdapterConfig;
 import com.loyalty.saas.domain.entity.EventFact;
 import com.loyalty.saas.domain.entity.EventInbox;
+import com.loyalty.saas.domain.entity.Program;
 import com.loyalty.saas.domain.repository.ChannelAdapterConfigRepository;
 import com.loyalty.saas.domain.repository.EventInboxRepository;
+import com.loyalty.saas.domain.repository.ProgramRepository;
 import com.loyalty.saas.mapping.ScriptingTransformer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +20,8 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -47,6 +51,7 @@ public class EventInboxProcessor {
 
     private final EventInboxRepository inboxRepo;
     private final ChannelAdapterConfigRepository configRepo;
+    private final ProgramRepository programRepo;
     private final ScriptingTransformer scriptingTransformer;
     private final EventBridge eventBridge;
 
@@ -64,10 +69,12 @@ public class EventInboxProcessor {
 
     public EventInboxProcessor(EventInboxRepository inboxRepo,
                                 ChannelAdapterConfigRepository configRepo,
+                                ProgramRepository programRepo,
                                 ScriptingTransformer scriptingTransformer,
                                 @Autowired(required = false) EventBridge eventBridge) {
         this.inboxRepo = inboxRepo;
         this.configRepo = configRepo;
+        this.programRepo = programRepo;
         this.scriptingTransformer = scriptingTransformer;
         this.eventBridge = eventBridge;
     }
@@ -79,7 +86,11 @@ public class EventInboxProcessor {
      */
     @Scheduled(fixedDelay = 1000)
     public void processReceived() {
-        var events = inboxRepo.findByStatus("RECEIVED", 100);
+        List<String> programCodes = programRepo.findAll().stream().map(Program::getCode).toList();
+        List<EventInbox> events = new ArrayList<>();
+        for (String pc : programCodes) {
+            events.addAll(inboxRepo.findByStatus(pc, "RECEIVED", 100));
+        }
         for (EventInbox event : events) {
             event.setStatus("VALIDATING");
             inboxRepo.save(event);
@@ -96,7 +107,11 @@ public class EventInboxProcessor {
     @Scheduled(fixedDelay = 5000)
     public void retryFailed() {
         LocalDateTime now = LocalDateTime.now();
-        var failed = inboxRepo.findRetryable(3, now);
+        List<String> programCodes = programRepo.findAll().stream().map(Program::getCode).toList();
+        List<EventInbox> failed = new ArrayList<>();
+        for (String pc : programCodes) {
+            failed.addAll(inboxRepo.findRetryable(pc, 3, now));
+        }
         for (EventInbox event : failed) {
             event.setStatus("RETRYING");
             event.setRetryCount(event.getRetryCount() != null ? event.getRetryCount() + 1 : 1);
@@ -114,7 +129,11 @@ public class EventInboxProcessor {
      */
     @Scheduled(fixedDelay = 10000)
     public void moveToDead() {
-        var exhausted = inboxRepo.findExhaustedRetries(3);
+        List<String> programCodes = programRepo.findAll().stream().map(Program::getCode).toList();
+        List<EventInbox> exhausted = new ArrayList<>();
+        for (String pc : programCodes) {
+            exhausted.addAll(inboxRepo.findExhaustedRetries(pc, 3));
+        }
         for (EventInbox event : exhausted) {
             String oldStatus = event.getStatus();
             event.setStatus("DEAD");
@@ -137,7 +156,7 @@ public class EventInboxProcessor {
         TenantContext.set(event.getProgramCode());
         try {
             // 1. 幂等检查
-            if (inboxRepo.existsByIdempotencyKeyAndStatus(event.getIdempotencyKey(), "SUCCEEDED")) {
+            if (inboxRepo.existsByIdempotencyKeyAndStatus(event.getProgramCode(), event.getIdempotencyKey(), "SUCCEEDED")) {
                 event.setStatus("REJECTED");
                 event.setRejectReason("DUPLICATE");
                 inboxRepo.save(event);

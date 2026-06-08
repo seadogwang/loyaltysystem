@@ -90,7 +90,7 @@ public class TmallSpiHandler implements ChannelSpiHandler {
             Map<String, Object> payload = objectMapper.readValue(bodyStr, Map.class);
 
             // 幂等检查
-            if (eventInboxRepo.findByIdempotencyKey(idempotencyKey).isPresent()) {
+            if (eventInboxRepo.findByIdempotencyKey(programCode, idempotencyKey).isPresent()) {
                 log.info("[TmallSpi] 幂等拦截: idempotencyKey={}", idempotencyKey);
                 return Map.of("code", "SUCCESS", "message", "ok (idempotent)");
             }

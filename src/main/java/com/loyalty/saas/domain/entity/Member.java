@@ -6,6 +6,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -58,6 +59,18 @@ public class Member implements Serializable {
     @Id
     @Column(name = "member_id", nullable = false)
     private Long memberId;
+
+    /** 会员姓名 */
+    @Column(name = "name", length = 100)
+    private String name;
+
+    /** 性别 */
+    @Column(name = "gender", length = 10)
+    private String gender;
+
+    /** 生日 */
+    @Column(name = "birthday")
+    private LocalDate birthday;
 
     /** 会员状态: ENROLLED / SUSPENDED / MERGED / DEACTIVATED */
     @Column(name = "status", nullable = false, length = 20)

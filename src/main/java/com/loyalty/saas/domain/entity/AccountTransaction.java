@@ -57,11 +57,11 @@ public class AccountTransaction implements Serializable {
     private String transactionType;
 
     /** 变动金额（正入负出） */
-    @Column(name = "amount", nullable = false, precision = 20, scale = 2)
+    @Column(name = "amount", nullable = false, precision = 18, scale = 4)
     private BigDecimal amount;
 
     /** 剩余可用额度 */
-    @Column(name = "remaining_amount", precision = 20, scale = 2)
+    @Column(name = "remaining_amount", precision = 18, scale = 4)
     private BigDecimal remainingAmount;
 
     /** 过期时间 */

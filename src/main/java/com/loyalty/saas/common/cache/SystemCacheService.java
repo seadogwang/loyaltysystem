@@ -38,8 +38,14 @@ public class SystemCacheService {
     public void init() {
         log.info("[SystemCache] Loading cache...");
         try {
-            em.createNativeQuery("SELECT set_config('app.current_program_code', 'PROG001', false)").getSingleResult();
-            loadProgramDefs();
+            // 遍历所有程序加载程序定义
+            List<String> programs = em.createQuery("SELECT p.code FROM Program p", String.class).getResultList();
+            for (String pc : programs) {
+                em.createNativeQuery("SELECT set_config('app.current_program_code', :pc, false)")
+                        .setParameter("pc", pc).getSingleResult();
+                loadProgramDefs();
+            }
+            // 枚举仅加载一次（使用 SYSTEM programCode）
             loadEnums();
         } catch (Exception e) { log.error("[SystemCache] Load failed", e); }
         log.info("[SystemCache] Done: {} programs, {} enum types", programDefs.size(), enums.size());

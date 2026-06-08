@@ -62,7 +62,7 @@ class EventInboxProcessorTest {
         em.flush();
         assertNotNull(event.getId());
 
-        var found = inboxRepo.findByStatus("RECEIVED", 10);
+        var found = inboxRepo.findByStatus("PROG001", "RECEIVED", 10);
         assertFalse(found.isEmpty());
     }
 
@@ -83,10 +83,10 @@ class EventInboxProcessorTest {
                 .build());
         em.flush();
 
-        boolean exists = inboxRepo.existsByIdempotencyKeyAndStatus("PROG001:JD:test:idem", "SUCCEEDED");
+        boolean exists = inboxRepo.existsByIdempotencyKeyAndStatus("PROG001", "PROG001:JD:test:idem", "SUCCEEDED");
         assertTrue(exists);
 
-        boolean notExists = inboxRepo.existsByIdempotencyKeyAndStatus("PROG001:JD:test:idem", "RECEIVED");
+        boolean notExists = inboxRepo.existsByIdempotencyKeyAndStatus("PROG001", "PROG001:JD:test:idem", "RECEIVED");
         assertFalse(notExists);
     }
 
@@ -109,7 +109,7 @@ class EventInboxProcessorTest {
                 .build());
         em.flush();
 
-        var retryable = inboxRepo.findRetryable(3, LocalDateTime.now().plusSeconds(10));
+        var retryable = inboxRepo.findRetryable("PROG001", 3, LocalDateTime.now().plusSeconds(10));
         assertFalse(retryable.isEmpty());
         assertTrue(retryable.stream().anyMatch(e -> "evt-test-retryable".equals(e.getSourceEventId())));
     }
@@ -132,7 +132,7 @@ class EventInboxProcessorTest {
                 .build());
         em.flush();
 
-        var exhausted = inboxRepo.findExhaustedRetries(3);
+        var exhausted = inboxRepo.findExhaustedRetries("PROG001", 3);
         assertFalse(exhausted.isEmpty());
         assertTrue(exhausted.stream().anyMatch(e -> "evt-test-exhausted".equals(e.getSourceEventId())));
     }

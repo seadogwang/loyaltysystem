@@ -11,8 +11,21 @@ api.interceptors.request.use((config) => {
   const programCode = sessionStorage.getItem('current_program_code') || 'PROG001';
   config.headers['X-Program-Code'] = programCode;
   config.headers['X-Trace-Id'] = crypto.randomUUID?.() || Date.now().toString(36);
+  const token = sessionStorage.getItem('auth_token');
+  if (token) config.headers['Authorization'] = `Bearer ${token}`;
   return config;
 });
+
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      sessionStorage.removeItem('auth_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  },
+);
 
 // ---- Schema API ----
 

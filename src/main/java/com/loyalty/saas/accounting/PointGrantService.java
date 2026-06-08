@@ -117,6 +117,11 @@ public class PointGrantService {
                 .orElseThrow(() -> new BusinessException("ERR_ACCOUNT_NOT_FOUND",
                         "MemberAccount not found: " + programCode + "/" + memberId + "/" + accountType));
 
+        // 冻结状态检查
+        if ("FROZEN_ALL".equals(account.getFrozenStatus())) {
+            throw new BusinessException("ERR_ACCOUNT_FROZEN", "账户已被冻结");
+        }
+
         final Long accountId = account.getAccountId();
 
         BigDecimal remainingToGrant = pointsToGrant;

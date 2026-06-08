@@ -53,7 +53,7 @@ public class WechatSpiHandler implements ChannelSpiHandler {
             Map<String, Object> payload = body.startsWith("{") ? mapper.readValue(body, Map.class)
                     : Map.of("xml_data", body);
             String idemKey = programCode + ":WECHAT:" + action + ":" + System.currentTimeMillis();
-            if (inboxRepo.findByIdempotencyKey(idemKey).isPresent())
+            if (inboxRepo.findByIdempotencyKey(programCode, idemKey).isPresent())
                 return wechatOk();
 
             inboxRepo.save(EventInbox.builder()
