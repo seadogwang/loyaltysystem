@@ -178,7 +178,7 @@ public class OpenApiSignatureFilter implements Filter {
             log.debug("[OpenAPI] 验签通过: program={}, path={}, nonce={}", programCode, path, nonce);
             chain.doFilter(request, response);
         } finally {
-            TenantContext.clear();
+            // TenantContext清除由TenantContextFilter统一负责
         }
     }
 

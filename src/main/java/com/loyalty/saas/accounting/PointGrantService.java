@@ -298,7 +298,6 @@ public class PointGrantService {
                     .programCode(programCode)
                     .memberId(memberId)
                     .accountType("CREDIT")
-                    .balance(BigDecimal.ZERO)
                     .creditLimit(BigDecimal.ZERO)
                     .creditUsed(BigDecimal.ZERO)
                     .overdraftLimit(BigDecimal.ZERO)

@@ -80,6 +80,7 @@ public class AdminController {
             @RequestParam(defaultValue = "") String q) {
         String pc = TenantContext.getRequired();
         List<Program> programs;
+        // 只返回当前租户的Program
         if (q != null && !q.isBlank()) {
             programs = em.createQuery(
                     "SELECT p FROM Program p WHERE p.code LIKE :q OR p.name LIKE :q",

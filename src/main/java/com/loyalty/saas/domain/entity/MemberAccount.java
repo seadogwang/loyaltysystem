@@ -26,9 +26,10 @@ public class MemberAccount {
     @Column(name = "account_type", nullable = false, length = 50)
     private String accountType;
 
-    @Column(name = "balance", nullable = false, precision = 20, scale = 4)
+    /** 账户冻结状态: ACTIVE / FROZEN_REDEMPTION / FROZEN_ALL */
+    @Column(name = "frozen_status", length = 16)
     @Builder.Default
-    private BigDecimal balance = BigDecimal.ZERO;
+    private String frozenStatus = "ACTIVE";
 
     @Column(name = "total_accrued", precision = 20, scale = 4)
     @Builder.Default

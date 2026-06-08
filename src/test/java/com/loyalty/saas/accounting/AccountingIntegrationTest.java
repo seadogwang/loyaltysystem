@@ -48,7 +48,7 @@ class AccountingIntegrationTest {
         if (accountRepo.findByMemberIdAndType(PROG, MEMBER, TYPE).isEmpty()) {
             accountRepo.save(MemberAccount.builder()
                     .programCode(PROG).memberId(MEMBER).accountType(TYPE)
-                    .balance(BigDecimal.ZERO).totalAccrued(BigDecimal.ZERO)
+                    .totalAccrued(BigDecimal.ZERO)
                     .totalRedeemed(BigDecimal.ZERO).totalExpired(BigDecimal.ZERO)
                     .overdraftLimit(new BigDecimal("1000.0000"))
                     .creditLimit(new BigDecimal("500.0000"))
