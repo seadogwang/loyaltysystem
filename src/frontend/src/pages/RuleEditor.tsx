@@ -17,7 +17,7 @@ const { Panel } = Collapse;
 
 type Option = { label: string; value: string };
 type SchemaField = Option & { type: string; format?: string; enumValues?: string[] };
-interface ExtCondition { key: string; field: string; type?: string; format?: string; op: string; value: string; valueEnd?: string; }
+interface ExtCondition { key: string; field: string; type?: string; format?: string; op: string; value: string; valueEnd?: string; entity?: string; }
 interface TierBonus { key: string; tier: string; bonus: number; }
 interface CategoryWeight { key: string; cat: string; weight: number; }
 interface QuantityTier { key: string; minQty: number; bonus: number; }
@@ -81,16 +81,18 @@ function generateDrl(data: Record<string, any>): string {
   const extConds: ExtCondition[] = data.extConditions || [];
   for (const c of extConds) {
     if (!c.field || !c.op) continue;
-    const fn = c.type === 'number' ? 'getPayloadNumber' : 'getPayloadString';
+    const isMemberField = c.entity === 'MEMBER';
+    const obj = isMemberField ? '$member' : '$event';
+    const fn = isMemberField ? (c.type === 'number' ? 'getExtNumber' : 'getExtString') : (c.type === 'number' ? 'getPayloadNumber' : 'getPayloadString');
     if (c.op === 'BETWEEN' || c.op === 'BETWEEN_EQ') {
       const v1 = isNaN(Number(c.value)) ? `"${c.value}"` : c.value;
       const v2 = isNaN(Number(c.valueEnd)) ? `"${c.valueEnd}"` : c.valueEnd;
       const o = c.op === 'BETWEEN_EQ' ? '>=' : '>';
       const o2 = c.op === 'BETWEEN_EQ' ? '<=' : '<';
-      conds.push(`    eval($event.${fn}("${c.field}") ${o} ${v1} && $event.${fn}("${c.field}") ${o2} ${v2})`);
+      conds.push(`    eval(${obj}.${fn}("${c.field}") ${o} ${v1} && ${obj}.${fn}("${c.field}") ${o2} ${v2})`);
     } else {
       const v = isNaN(Number(c.value)) ? `"${c.value}"` : c.value;
-      conds.push(`    eval($event.${fn}("${c.field}") ${c.op} ${v})`);
+      conds.push(`    eval(${obj}.${fn}("${c.field}") ${c.op} ${v})`);
     }
   }
 
@@ -380,7 +382,7 @@ const RuleEditor: React.FC = () => {
             <Button key={e.value}
               type={selectedEntity === e.value ? 'primary' : 'default'}
               size="small"
-              onClick={() => { setSelectedEntity(e.value); setExtConditions([]); }}
+              onClick={() => { setSelectedEntity(e.value); }}
             >
               {e.label}
             </Button>
@@ -393,7 +395,7 @@ const RuleEditor: React.FC = () => {
         extra={<Text type="secondary" style={{ fontSize: 11 }}>点击属性添加为条件</Text>}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {schemaFields.filter(f => f.type !== 'array').map(f => {
-            const added = extConditions.some(c => c.field === f.value);
+            const added = extConditions.some(c => c.field === f.value && c.entity === selectedEntity);
             return (
               <Tag key={f.value}
                 style={{ cursor: 'pointer', fontSize: 12, padding: '2px 10px', border: added ? `1px solid ${f.format === 'date-time' ? '#fa8c16' : f.type === 'number' ? '#1677ff' : '#52c41a'}` : '1px dashed #d9d9d9', background: added ? '#f0f5ff' : '#fff' }}
@@ -404,7 +406,7 @@ const RuleEditor: React.FC = () => {
                     setEditingCondIdx(exists);
                   } else {
                     const newIdx = extConditions.length;
-                    setExtConditions([...extConditions, { key: String(Date.now()), field: f.value, type: f.type, format: f.format, op: f.type === 'number' || f.format ? '>=' : '==', value: '' }]);
+                    setExtConditions([...extConditions, { key: String(Date.now()), field: f.value, type: f.type, format: f.format, entity: selectedEntity, op: f.type === 'number' || f.format ? '>=' : '==', value: '' }]);
                     setEditingCondIdx(newIdx);
                   }
                 }}
@@ -416,12 +418,23 @@ const RuleEditor: React.FC = () => {
         </div>
       </Card>
 
-      {/* 已添加的条件 — 内联编辑 */}
+      {/* 已添加的条件 — 按实体分组 */}
       {extConditions.filter(c => c.field).length > 0 && (
         <Card size="small" title={<Space><Tag color="green">{extConditions.filter(c => c.field).length}</Tag>已添加的条件</Space>} style={{ marginTop: 12 }}>
-          {extConditions.filter(c => c.field).map((c, i) => {
-            const fm = schemaFields.find(f => f.value === c.field);
-            const isEditing = editingCondIdx === i;
+          {(() => {
+            const grouped = new Map<string, ExtCondition[]>();
+            extConditions.filter(c => c.field).forEach(c => {
+              const ent = c.entity || 'OTHER';
+              if (!grouped.has(ent)) grouped.set(ent, []);
+              grouped.get(ent)!.push(c);
+            });
+            return Array.from(grouped.entries()).map(([entity, conds]) => (
+              <div key={entity} style={{ marginBottom: 8 }}>
+                <Tag color="blue" style={{ marginBottom: 4 }}>{entity}</Tag>
+                {conds.map((c, i) => {
+                  const globalIdx = extConditions.findIndex(x => x.key === c.key);
+                  const fm = schemaFields.find(f => f.value === c.field) || { label: c.field, value: c.field, type: c.type || 'string' } as SchemaField;
+                  const isEditing = editingCondIdx === globalIdx;
             return (
               <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: isEditing ? '6px 8px' : '4px 0', background: isEditing ? '#fffbe6' : 'transparent', borderRadius: 4, flexWrap: 'wrap' }}>
                 <Tag color={c.type === 'number' ? 'blue' : c.format === 'date-time' ? 'orange' : 'green'} style={{ margin: 0, flexShrink: 0 }}>{fm?.label || c.field}</Tag>
@@ -450,13 +463,14 @@ const RuleEditor: React.FC = () => {
                 ) : (
                   <>
                     <Text style={{ fontSize: 12 }}>{c.op?.startsWith('BETWEEN') ? `${c.op === 'BETWEEN_EQ' ? '区间[含]' : '区间'} ${c.value || '?'} ~ ${c.valueEnd || '?'}` : `${c.op} ${c.value || '(未设置)'}`}</Text>
-                    <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={() => setEditingCondIdx(i)}>编辑</Button>
-                    <Button size="small" type="link" danger style={{ padding: 0, fontSize: 11 }} onClick={() => setExtConditions(extConditions.filter((_, j) => j !== i))}>删除</Button>
+                    <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={() => setEditingCondIdx(globalIdx)}>编辑</Button>
+                    <Button size="small" type="link" danger style={{ padding: 0, fontSize: 11 }} onClick={() => setExtConditions(extConditions.filter((_, j) => j !== globalIdx))}>删除</Button>
                   </>
                 )}
               </div>
-            );
-          })}
+            );})}
+            </div>
+          ));})()}
         </Card>
       )}
 
