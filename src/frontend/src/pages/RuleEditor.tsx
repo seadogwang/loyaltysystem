@@ -21,6 +21,7 @@ const { Panel } = Collapse;
 interface ExtCondition {
   key: string;
   field: string;
+  type?: string;
   op: string;
   value: string;
 }
@@ -222,6 +223,8 @@ const RuleEditor: React.FC = () => {
   const [channelOptions, setChannelOptions] = useState<Option[]>(DEFAULT_channelOptions);
   const [tierOptions, setTierOptions] = useState<Option[]>(DEFAULT_tierOptions);
   const [pointTypeOptions, setPointTypeOptions] = useState<Option[]>(DEFAULT_pointTypeOptions);
+  const [transactionSchemaFields, setTransactionSchemaFields] = useState<Array<Option & { type: string }>>([]);
+  const [memberSchemaFields, setMemberSchemaFields] = useState<Array<Option & { type: string }>>([]);
 
   useEffect(() => {
     // 从 /admin/tiers 获取积分类型和等级
@@ -250,6 +253,24 @@ const RuleEditor: React.FC = () => {
       if (enums?.channel?.length) {
         setChannelOptions(enums.channel.map((c: any) => ({
           label: c.enum_name || c.enum_code, value: c.enum_code,
+        })));
+      }
+    }).catch(() => {});
+
+    // 从 Schema 获取业务实体字段定义
+    api.get('/schemas/TRANSACTION').then(({ data }) => {
+      const schema = data?.data?.schema || data?.data;
+      if (schema?.properties) {
+        setTransactionSchemaFields(Object.entries(schema.properties).map(([key, val]: any) => ({
+          label: `${val.title || key} (${key})`, value: key, type: val.type || 'string',
+        })));
+      }
+    }).catch(() => {});
+    api.get('/schemas/MEMBER').then(({ data }) => {
+      const schema = data?.data?.schema || data?.data;
+      if (schema?.properties) {
+        setMemberSchemaFields(Object.entries(schema.properties).map(([key, val]: any) => ({
+          label: `${val.title || key} (${key})`, value: key, type: val.type || 'string',
         })));
       }
     }).catch(() => {});
@@ -510,16 +531,27 @@ const RuleEditor: React.FC = () => {
       <Form.Item label="时间条件" tooltip="限定特定时间段生效">
         <Checkbox.Group options={TIME_CONDITIONS} value={timeConditions} onChange={v => setTimeConditions(v as string[])} />
       </Form.Item>
-      <Divider orientation="left" plain style={{ fontSize: 12 }}>扩展属性条件</Divider>
-      {extConditions.map((cond, idx) => (
+      <Divider orientation="left" plain style={{ fontSize: 12 }}>
+        触发字段条件 (来自 {ruleCategory === 'ORDER' ? 'TRANSACTION' : 'MEMBER'} Schema)
+      </Divider>
+      {extConditions.map((cond, idx) => {
+        const schemaFields = ruleCategory === 'ORDER' ? transactionSchemaFields : memberSchemaFields;
+        return (
         <Row gutter={8} key={cond.key} style={{ marginBottom: 8 }}>
-          <Col span={7}>
-            <Input placeholder="字段名" value={cond.field}
-              onChange={e => {
+          <Col span={8}>
+            <Select
+              showSearch
+              placeholder="选择字段"
+              value={cond.field || undefined}
+              options={schemaFields}
+              style={{ width: '100%' }}
+              onChange={v => {
                 const next = [...extConditions];
-                next[idx] = { ...next[idx], field: e.target.value };
+                const sf = schemaFields.find(f => f.value === v);
+                next[idx] = { ...next[idx], field: v, type: sf?.type || 'string' };
                 setExtConditions(next);
-              }} />
+              }}
+            />
           </Col>
           <Col span={5}>
             <Select value={cond.op} options={OPS} style={{ width: '100%' }}
@@ -529,7 +561,7 @@ const RuleEditor: React.FC = () => {
                 setExtConditions(next);
               }} />
           </Col>
-          <Col span={7}>
+          <Col span={6}>
             <Input placeholder="值" value={cond.value}
               onChange={e => {
                 const next = [...extConditions];
@@ -549,7 +581,8 @@ const RuleEditor: React.FC = () => {
             )}
           </Col>
         </Row>
-      ))}
+        );
+      })}
       {extConditions.length === 0 && (
         <Button type="dashed" size="small" onClick={() => setExtConditions([
           { key: String(Date.now()), field: '', op: '>', value: '' },
