@@ -258,7 +258,7 @@ const RuleEditor: React.FC = () => {
     }).catch(() => {});
 
     // 从 Schema 获取业务实体字段定义
-    api.get('/schemas/TRANSACTION').then(({ data }) => {
+    api.get('/schemas/TRANSACTION_EVENT').then(({ data }) => {
       const schema = data?.data?.schema || data?.data;
       if (schema?.properties) {
         setTransactionSchemaFields(Object.entries(schema.properties).map(([key, val]: any) => ({
