@@ -318,7 +318,7 @@ const RuleEditor: React.FC = () => {
         {c ? (
           <>
             <Tag style={{ fontSize: 11, margin: 0 }}>{c.op?.startsWith('BETWEEN') ? `${c.op === 'BETWEEN_EQ' ? '区间[含]' : '区间'} ${c.value || '?'}~${c.valueEnd || '?'}` : `${c.op} ${c.value}`}</Tag>
-            <Button size="small" type="link" style={{ padding: 0 }} icon={<EditOutlined style={{ fontSize: 13 }} />} onClick={() => setEditingCondIdx(idx)} />
+            <Button size="small" type="link" style={{ padding: 0 }} icon={<EditOutlined style={{ fontSize: 13, color: '#595959' }} />} onClick={() => setEditingCondIdx(idx)} />
             <Button size="small" type="link" danger style={{ padding: 0, fontSize: 11 }} onClick={() => setExtConditions(extConditions.filter((_, i) => i !== idx))}>×</Button>
           </>
         ) : f.type === 'array' ? (
@@ -463,8 +463,8 @@ const RuleEditor: React.FC = () => {
                 ) : (
                   <>
                     <Text style={{ fontSize: 12 }}>{c.op?.startsWith('BETWEEN') ? `${c.op === 'BETWEEN_EQ' ? '区间[含]' : '区间'} ${c.value || '?'} ~ ${c.valueEnd || '?'}` : `${c.op} ${c.value || '(未设置)'}`}</Text>
-                    <Button size="small" type="link" style={{ padding: 0 }} icon={<EditOutlined style={{ fontSize: 13 }} />} onClick={() => setEditingCondIdx(globalIdx)}>编辑</Button>
-                    <Button size="small" type="link" danger style={{ padding: 0 }} icon={<DeleteOutlined style={{ fontSize: 13 }} />} onClick={() => setExtConditions(extConditions.filter((_, j) => j !== globalIdx))} />
+                    <Button size="small" type="link" style={{ padding: 0 }} icon={<EditOutlined style={{ fontSize: 13, color: '#595959' }} />} onClick={() => setEditingCondIdx(globalIdx)}>编辑</Button>
+                    <Button size="small" type="link" style={{ padding: 0 }} icon={<DeleteOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />} onClick={() => setExtConditions(extConditions.filter((_, j) => j !== globalIdx))} />
                   </>
                 )}
               </div>
@@ -587,7 +587,7 @@ const RuleEditor: React.FC = () => {
       <Collapse activeKey={scriptExpanded ? ['s'] : []} onChange={ks => setScriptExpanded(ks.includes('s'))} style={{ background: '#fafafa' }}>
         <Panel header={<Space><EyeOutlined /><Text>查看脚本</Text><Tag color="blue">Drools DRL</Tag></Space>} key="s" extra={
           <Space onClick={e => e.stopPropagation()}>
-            {manualEdit ? <Button size="small" onClick={() => { setManualEdit(false); message.info('已切换为自动生成'); }}>自动生成</Button> : <Button size="small" icon={<EditOutlined />} onClick={handleManualEdit}>手动编辑</Button>}
+            {manualEdit ? <Button size="small" onClick={() => { setManualEdit(false); message.info('已切换为自动生成'); }}>自动生成</Button> : <Button size="small" icon={<EditOutlined style={{ fontSize: 13, color: '#1a1a1a' }} />} onClick={handleManualEdit} />}
             <Button size="small" icon={<CopyOutlined />} onClick={handleCopy}>复制</Button>
           </Space>
         }>
