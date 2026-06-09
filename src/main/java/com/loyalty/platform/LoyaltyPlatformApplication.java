@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.scheduling.annotation.EnableAsync;
 
 /**
- * 金融级全渠道忠诚度管理 SaaS 平台 —— 启动入口。
+ * 全渠道忠诚度管理平台 —— 启动入口。
  *
  * <p>本平台基于 Spring Boot 3 + Java 17 构建，采用多租户强隔离架构。
  * 核心特性：

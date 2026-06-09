@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">Loyalty Platform</h1>
-  <p align="center">Financial-grade Omni-channel Loyalty Management SaaS Platform</p>
-  <p align="center">金融级全渠道忠诚度管理 SaaS 平台</p>
+  <p align="center">Omni-channel Loyalty Management Platform</p>
+  <p align="center">全渠道忠诚度管理平台</p>
   <p align="center">
     <img src="https://img.shields.io/badge/Java-17-blue" alt="Java 17">
     <img src="https://img.shields.io/badge/Spring%20Boot-3.2.5-green" alt="Spring Boot 3.2.5">
@@ -18,7 +18,7 @@
 
 ### Overview
 
-Loyalty Platform is a **financial-grade omni-channel loyalty management SaaS platform** built for enterprises operating across multiple retail channels (Tmall, JD.com, Douyin, WeChat Mini Programs). It provides a unified member identity system, flexible points accounting engine, rule-driven reward distribution, and visual workflow orchestration.
+Loyalty Platform is a **omni-channel loyalty management platform** built for enterprises operating across multiple retail channels (Tmall, JD.com, Douyin, WeChat Mini Programs). It provides a unified member identity system, flexible points accounting engine, rule-driven reward distribution, and visual workflow orchestration.
 
 **Key Capabilities:**
 - **Multi-Tenant Isolation** — 4-layer defense: HTTP filter → ORM interceptor → middleware sandbox → query sentinel
@@ -135,7 +135,7 @@ src/main/java/com/loyalty/platform/
 
 ### 概述
 
-Loyalty Platform 是一个**金融级全渠道忠诚度管理 SaaS 平台**，面向跨零售渠道（天猫、京东、抖音、微信小程序）运营的企业。提供统一的会员身份体系、灵活的积分账务引擎、规则驱动的奖励分发和可视化流程编排。
+Loyalty Platform 是一个**全渠道忠诚度管理平台**，面向跨零售渠道（天猫、京东、抖音、微信小程序）运营的企业。提供统一的会员身份体系、灵活的积分账务引擎、规则驱动的奖励分发和可视化流程编排。
 
 **核心能力：**
 - **多租户强隔离** — 四层防御体系：入口过滤 → ORM 拦截 → 中间件沙箱 → 查询哨兵

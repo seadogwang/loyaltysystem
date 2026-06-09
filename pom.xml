@@ -16,7 +16,7 @@
     <artifactId>loyalty-platform</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <name>Loyalty Platform</name>
-    <description>金融级全渠道忠诚度管理平台</description>
+    <description>全渠道忠诚度管理平台</description>
 
     <properties>
         <java.version>17</java.version>
