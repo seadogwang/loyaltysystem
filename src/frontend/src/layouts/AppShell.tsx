@@ -5,7 +5,7 @@ import {
   PartitionOutlined, BuildOutlined, TeamOutlined,
   DollarOutlined, CrownOutlined, ApiOutlined,
   CodeOutlined, AuditOutlined, BellOutlined,
-  SettingOutlined, UserOutlined, LogoutOutlined,
+  SettingOutlined, UserOutlined, LogoutOutlined, ApartmentOutlined,
   SafetyCertificateOutlined, FileTextOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '../store';
@@ -34,6 +34,7 @@ const menuItems: MenuItemType[] = [
     key: 'tier-rule', icon: <CrownOutlined />, label: '规则引擎',
     children: [
       { key: 'rule-list', icon: <SettingOutlined />, label: '规则列表', path: '/rules' },
+      { key: 'flow-designer', icon: <ApartmentOutlined />, label: '流程设计器', path: '/flow-designer' },
     ],
   },
   {
@@ -129,9 +130,33 @@ const AppShell: React.FC = () => {
           colorPrimary: '#1a1a1a',
           borderRadius: 6,
         },
+        components: {
+          Menu: {
+            colorBgElevated: '#fff',
+          },
+        },
       }}
     >
       <Layout style={{ minHeight: '100vh', background: '#fff' }}>
+        <style>{`
+          /* 顶部菜单：选中项再次悬停时的背景色 */
+          .app-shell-menu.ant-menu-horizontal .ant-menu-submenu-selected > .ant-menu-submenu-title:hover {
+            background: rgba(0, 0, 0, 0.04) !important;
+          }
+          .app-shell-menu.ant-menu-horizontal .ant-menu-item-selected:hover {
+            background: rgba(0, 0, 0, 0.04) !important;
+          }
+          /* 顶部菜单下拉弹出层：白色背景（Popup 渲染在 body 下，必须用全局选择器） */
+          .ant-menu-submenu-popup > .ant-menu {
+            background: #fff !important;
+          }
+          .ant-menu-submenu-popup .ant-menu-item {
+            background: #fff !important;
+          }
+          .ant-menu-submenu-popup .ant-menu-item:hover {
+            background: rgba(0, 0, 0, 0.04) !important;
+          }
+        `}</style>
         {/* ====== 顶部导航栏 ====== */}
         <Header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -175,6 +200,7 @@ const AppShell: React.FC = () => {
               flex: 1, borderBottom: 'none', justifyContent: 'center',
               background: 'transparent', lineHeight: '54px',
             }}
+            className="app-shell-menu"
             triggerSubMenuAction="hover"
           />
 
@@ -211,7 +237,7 @@ const AppShell: React.FC = () => {
           {!online && (
             <Alert type="warning" message="网络连接已断开，正在重连..." banner style={{ borderRadius: 0 }} />
           )}
-          <Content style={{ padding: 24, minHeight: 'calc(100vh - 56px - 32px)', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
+          <Content style={{ padding: 24, minHeight: 'calc(100vh - 56px - 32px)', maxWidth: 1400, margin: '0 auto', width: '100%', background: '#fff' }}>
             <Outlet />
           </Content>
           <Footer style={{

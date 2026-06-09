@@ -54,7 +54,7 @@
 |------|------|------|
 | M1 | TenantMybatisPlusInterceptor仅审计不注入租户过滤 | `TenantMybatisPlusInterceptor.java` |
 | M2 | 分区键路由使用 `"unknown"` 导致热点分区 | `EventInboxProcessor.java:224` |
-| M3 | 包结构与设计文档Ch2.4.1不一致 (`com.loyalty.saas` vs `com.loyalty.platform`) | 全局 |
+| M3 | 包结构与设计文档Ch2.4.1不一致 (`com.loyalty.platform` vs `com.loyalty.platform`) | 全局 |
 | M4 | KafkaEventBus缺少死信队列/重试机制 | `KafkaEventBus.java` |
 | M5 | LocalEventRouter静默丢弃无处理器的事件 | `LocalEventRouter.java` |
 | M6 | LocalEventBus队列容量配置未生效 | `LocalEventBus.java` |

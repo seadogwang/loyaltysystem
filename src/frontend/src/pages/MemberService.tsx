@@ -527,7 +527,6 @@ const MemberService: React.FC = () => {
 
           {/* Tabs */}
           <Card bodyStyle={{ padding: 0 }}>
-            <ConfigProvider theme={{ token: { colorPrimary: '#1a1a1a' } }}>
             <Tabs activeKey={activeTab} onChange={setActiveTab} style={{ padding: '0 16px' }}
               items={[
                 {
@@ -575,7 +574,6 @@ const MemberService: React.FC = () => {
                 },
               ]}
             />
-          </ConfigProvider>
           </Card>
         </>
       )}

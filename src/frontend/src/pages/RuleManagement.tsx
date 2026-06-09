@@ -36,7 +36,7 @@ const RuleManagement: React.FC = () => {
     if (!prompt.trim()) { message.warning('请输入规则描述'); return; }
     setAiLoading(true);
     try {
-      const { data } = await api.post('/ai/generate-rule', { prompt });
+      const { data } = await api.post('/admin/rules/generate', { prompt });
       setAiResult(data.data);
       message.success('AI 规则生成完成');
     } catch (e: any) { message.error(e.message || 'AI 生成失败'); }

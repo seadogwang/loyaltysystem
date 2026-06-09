@@ -13,10 +13,10 @@ import api from '../api';
 const { Title, Text } = Typography;
 
 // 示例 DRL 模板
-const DEFAULT_DRL = `package com.loyalty.saas.rules;
+const DEFAULT_DRL = `package com.loyalty.platform.rules;
 
-import com.loyalty.saas.rules.drl.MemberFact;
-import com.loyalty.saas.rules.drl.EventFact;
+import com.loyalty.platform.rules.drl.MemberFact;
+import com.loyalty.platform.rules.drl.EventFact;
 
 rule "示例规则"
   agenda-group "purchase"
@@ -65,7 +65,7 @@ const RuleEditor: React.FC = () => {
     if (!aiPrompt.trim()) { message.warning('请输入规则描述'); return; }
     setAiLoading(true);
     try {
-      const { data } = await api.post('/ai/generate-rule', { prompt: aiPrompt });
+      const { data } = await api.post('/admin/rules/generate', { prompt: aiPrompt });
       setAiResult(data?.data);
     } catch (e: any) {
       message.error(e.response?.data?.message || 'AI 生成失败，请检查后端 LLM 配置');

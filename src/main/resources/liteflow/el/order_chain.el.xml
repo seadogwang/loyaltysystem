@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flow>
+    <!--
+        订单事件处理链 — 默认 LiteFlow 流程定义
+        组件顺序: 幂等检查 → 数据标准化 → One-ID匹配 → 事实构建 → 规则引擎 → 动作执行 → 完成处理
+
+        组件扫描路径: com.loyalty.platform.flow.components
+        每个组件通过 @LiteflowComponent("name") 注册
+    -->
+    <chain name="ORDER_CHAIN">
+        THEN(
+            idempotentCmp,
+            standardizeCmp,
+            oneIdCmp,
+            factBuilderCmp,
+            ruleEngineCmp,
+            actionExecuteCmp,
+            completeCmp
+        );
+    </chain>
+
+    <!--
+        行为事件处理链 — 同 ORDER_CHAIN 结构
+        未来可根据行为类型进一步细化（签到/浏览/分享）
+    -->
+    <chain name="BEHAVIOR_CHAIN">
+        THEN(
+            idempotentCmp,
+            standardizeCmp,
+            oneIdCmp,
+            factBuilderCmp,
+            ruleEngineCmp,
+            actionExecuteCmp,
+            completeCmp
+        );
+    </chain>
+
+    <!--
+        退款事件处理链 — 仅执行幂等+标准化+事实构建，
+        规则引擎输出为负数积分（冲正）
+    -->
+    <chain name="REFUND_CHAIN">
+        THEN(
+            idempotentCmp,
+            standardizeCmp,
+            oneIdCmp,
+            factBuilderCmp,
+            ruleEngineCmp,
+            actionExecuteCmp,
+            completeCmp
+        );
+    </chain>
+</flow>

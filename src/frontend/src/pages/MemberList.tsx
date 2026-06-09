@@ -72,7 +72,7 @@ const MemberList: React.FC = () => {
   ];
 
   return (
-    <div>
+    <div style={{ background: '#fff', padding: 24 }}>
       <Space style={{ marginBottom: 16 }}>
         <Input.Search placeholder="搜索会员ID" value={search} onChange={e => setSearch(e.target.value)}
           onSearch={fetchMembers} style={{ width: 300 }} enterButton={<SearchOutlined />} />

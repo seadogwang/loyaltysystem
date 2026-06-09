@@ -27,6 +27,7 @@ const TierConfig = lazy(() => import('../pages/TierConfig'));
 const RuleList = lazy(() => import('../pages/RuleList'));
 const RuleEditor = lazy(() => import('../pages/RuleEditor'));
 const SandboxTest = lazy(() => import('../pages/SandboxTest'));
+const FlowDesigner = lazy(() => import('../pages/FlowDesigner'));
 const ChannelList = lazy(() => import('../pages/ChannelList'));
 const MappingEditor = lazy(() => import('../pages/MappingEditor'));
 const ScriptingWorkbench = lazy(() => import('../components/ScriptingWorkbench/ScriptingWorkbench'));
@@ -56,7 +57,10 @@ const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) 
 // ==================== 权限守卫 ====================
 
 const AuthGuard: React.FC<{ permission?: string; children: React.ReactNode }> = ({ permission, children }) => {
-  // 开发阶段暂时放行所有权限
+  const { permissions } = useAppStore();
+  if (permission && !permissions.includes(permission)) {
+    return <Navigate to="/403" />;
+  }
   return <>{children}</>;
 };
 
@@ -161,6 +165,10 @@ export const router = createBrowserRouter([
         path: 'rules/:id/test',
         element: <SuspenseWrapper><AuthGuard><SandboxTest /></AuthGuard></SuspenseWrapper>,
       },
+      {
+        path: 'flow-designer',
+        element: <SuspenseWrapper><AuthGuard><FlowDesigner /></AuthGuard></SuspenseWrapper>,
+      },
 
       // 渠道集成
       {
@@ -206,6 +214,19 @@ export const router = createBrowserRouter([
       {
         path: 'system/audit',
         element: <SuspenseWrapper><AuthGuard><TenantAudit /></AuthGuard></SuspenseWrapper>,
+      },
+
+      // 403
+      {
+        path: '403',
+        element: (
+          <Result
+            status="403"
+            title="403"
+            subTitle="抱歉，您没有权限访问此页面"
+            extra={<Button type="primary" onClick={() => window.location.href = '/dashboard'}>返回首页</Button>}
+          />
+        ),
       },
 
       // 404

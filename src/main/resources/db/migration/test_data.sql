@@ -2,7 +2,7 @@
 
 -- 1. 会员 (已存在一个，更新更多)
 DELETE FROM member WHERE member_id IN (8821,8822,8823,8824,8825);
-UPDATE member SET tier_code='GOLD', status='ENROLLED', ext_attributes='{"pet_name":"旺财","shoe_size":42}' WHERE program_code='PROG001' AND member_id=318969221033889792;
+UPDATE member SET tier_code='GOLD', status='ENROLLED', ext_attributes='{"pet_name":"旺财","shoe_size":42,"mobile":"13812345678"}' WHERE program_code='PROG001' AND member_id=318969221033889792;
 
 -- 2. 积分流水 (account_transaction 需要 account_id)
 INSERT INTO account_transaction (account_id, program_code, member_id, account_type, transaction_type, amount, remaining_amount, expires_at, status, operation_key, created_at)
