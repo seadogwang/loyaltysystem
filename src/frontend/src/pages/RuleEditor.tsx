@@ -211,6 +211,8 @@ const RuleEditor: React.FC = () => {
   const [ruleCategory, setRuleCategory] = useState<'ORDER' | 'BEHAVIOR'>('ORDER');
   const [pointType, setPointType] = useState('REWARD_POINTS');
   const [schemaFields, setSchemaFields] = useState<SchemaField[]>([]);
+  const [orderSchemaFields, setOrderSchemaFields] = useState<SchemaField[]>([]);
+  const [behaviorSchemaFields, setBehaviorSchemaFields] = useState<SchemaField[]>([]);
   const [schemaTitle, setSchemaTitle] = useState('');
 
   // ② 筛选条件
@@ -263,19 +265,18 @@ const RuleEditor: React.FC = () => {
 
   // 加载 Schema + 选项
   useEffect(() => {
-    const schemaName = ruleCategory;
-    api.get(`/schemas/${schemaName}`).then(({ data }) => {
+    api.get('/schemas/ORDER').then(({ data }) => {
       const s = data?.data?.schema || data?.data;
-      if (s?.title) setSchemaTitle(s.title);
-      if (s?.properties) {
-        setSchemaFields(Object.entries(s.properties).map(([k, v]: any) => ({
-          label: `${v.title || k} (${k})`, value: k, type: v.type || 'string',
-        })));
-        // 提取 trade_status 枚举作为选项
-        if (s.properties.trade_status?.enum) {
-          setTradeStatusOptions(s.properties.trade_status.enum.map((e: string) => ({ label: e, value: e })));
-        }
-      }
+      const fields = Object.entries(s?.properties || {}).map(([k, v]: any) => ({ label: `${v.title || k} (${k})`, value: k, type: v.type || 'string' }));
+      setOrderSchemaFields(fields);
+      if (s?.properties?.trade_status?.enum) setTradeStatusOptions(s.properties.trade_status.enum.map((e: string) => ({ label: e, value: e })));
+      if (ruleCategory === 'ORDER') { setSchemaTitle(s?.title || ''); setSchemaFields(fields); }
+    }).catch(() => {});
+    api.get('/schemas/BEHAVIOR').then(({ data }) => {
+      const s = data?.data?.schema || data?.data;
+      const fields = Object.entries(s?.properties || {}).map(([k, v]: any) => ({ label: `${v.title || k} (${k})`, value: k, type: v.type || 'string' }));
+      setBehaviorSchemaFields(fields);
+      if (ruleCategory === 'BEHAVIOR') { setSchemaTitle(s?.title || ''); setSchemaFields(fields); }
     }).catch(() => {});
 
     api.get('/admin/tiers').then(({ data }) => {
@@ -288,7 +289,7 @@ const RuleEditor: React.FC = () => {
       const enums = data?.data?.enums;
       if (enums?.channel?.length) setChannelOptions(enums.channel.map((c: any) => ({ label: c.enum_name || c.enum_code, value: c.enum_code })));
     }).catch(() => {});
-  }, [ruleCategory]);
+  }, []);
 
   // 表单数据
   const formData = useMemo(() => ({
@@ -367,27 +368,64 @@ const RuleEditor: React.FC = () => {
   const stepContent = [
     // ① 规则类型
     <div key="s0">
-      <Form.Item label="规则分类">
-        <Radio.Group value={ruleCategory} onChange={e => setRuleCategory(e.target.value)}>
-          <Radio.Button value="ORDER">订单类 (按交易金额/明细)</Radio.Button>
-          <Radio.Button value="BEHAVIOR">行为类 (按次数)</Radio.Button>
-        </Radio.Group>
-      </Form.Item>
-      <Form.Item label="积分类型">
-        <Select value={pointType} onChange={setPointType} options={pointTypeOptions} style={{ width: 200 }} />
-      </Form.Item>
-      <Alert type="info" style={{ fontSize: 12 }}
-        message={`Schema: ${schemaTitle || ruleCategory} (${schemaFields.length} fields)`}
-        description={schemaFields.slice(0, 6).map(f => f.label).join(' / ') + (schemaFields.length > 6 ? ' ...' : '')} />
-      {ruleCategory === 'BEHAVIOR' && (
-        <Form.Item label="频次限制" style={{ marginTop: 16 }}>
-          <Radio.Group value={frequencyLimit} onChange={e => setFrequencyLimit(e.target.value)}>
-            <Radio.Button value="once">仅首次</Radio.Button>
-            <Radio.Button value="once_per_day">每天一次</Radio.Button>
-            <Radio.Button value="unlimited">每次均可</Radio.Button>
-          </Radio.Group>
-        </Form.Item>
-      )}
+      <Row gutter={24}>
+        <Col span={12}>
+          <Card size="small" hoverable onClick={() => setRuleCategory('ORDER')}
+            style={{ cursor: 'pointer', border: ruleCategory === 'ORDER' ? '2px solid #1677ff' : '1px solid #d9d9d9', background: ruleCategory === 'ORDER' ? '#f0f5ff' : '#fff' }}>
+            <Text strong style={{ fontSize: 15 }}>📦 订单类规则</Text>
+            <br /><Text type="secondary" style={{ fontSize: 12 }}>按交易金额比例或订单明细计算积分</Text>
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card size="small" hoverable onClick={() => setRuleCategory('BEHAVIOR')}
+            style={{ cursor: 'pointer', border: ruleCategory === 'BEHAVIOR' ? '2px solid #1677ff' : '1px solid #d9d9d9', background: ruleCategory === 'BEHAVIOR' ? '#f0f5ff' : '#fff' }}>
+            <Text strong style={{ fontSize: 15 }}>🏃 行为类规则</Text>
+            <br /><Text type="secondary" style={{ fontSize: 12 }}>按行为次数奖励固定积分，支持频次控制</Text>
+          </Card>
+        </Col>
+      </Row>
+
+      <Divider style={{ margin: '16px 0' }} />
+
+      <Row gutter={16}>
+        <Col span={8}>
+          <Form.Item label="积分类型" tooltip="选择此规则发放的积分种类">
+            <Select value={pointType} onChange={setPointType} options={pointTypeOptions} style={{ width: '100%' }} />
+          </Form.Item>
+        </Col>
+        <Col span={8}>
+          <Form.Item label="议程组" tooltip="决定规则在哪个阶段执行">
+            <Select value={agendaGroup} onChange={setAgendaGroup} options={AGENDA_GROUPS} style={{ width: '100%' }} />
+          </Form.Item>
+        </Col>
+        {ruleCategory === 'BEHAVIOR' && (
+          <Col span={8}>
+            <Form.Item label="频次限制" tooltip="控制行为重复奖励策略">
+              <Radio.Group value={frequencyLimit} onChange={e => setFrequencyLimit(e.target.value)} size="small">
+                <Radio.Button value="once">仅首次</Radio.Button>
+                <Radio.Button value="once_per_day">每天一次</Radio.Button>
+                <Radio.Button value="unlimited">每次均可</Radio.Button>
+              </Radio.Group>
+            </Form.Item>
+          </Col>
+        )}
+      </Row>
+
+      {/* Schema 字段预览 + 快速配置 */}
+      <Card size="small" title={<Space><Tag color="blue">{ruleCategory}</Tag>Schema 字段预览</Space>}
+        style={{ marginTop: 12 }} bodyStyle={{ padding: '8px 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 4 }}>
+          {schemaFields.map(f => (
+            <div key={f.value} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+              <Tag color={f.type === 'number' ? 'blue' : f.type === 'string' ? 'green' : f.type === 'array' ? 'orange' : 'default'}
+                style={{ fontSize: 11, margin: 0, flexShrink: 0 }}>
+                {f.type}
+              </Tag>
+              <Text style={{ fontSize: 12 }}>{f.label}</Text>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>,
 
     // ② 筛选条件 (all optional)
@@ -520,9 +558,8 @@ const RuleEditor: React.FC = () => {
 
       <Card size="small" style={{ marginBottom: 16 }}>
         <Row gutter={16}>
-          <Col span={8}><Form.Item label="规则名称" style={{ marginBottom: 0 }}><Input placeholder="例如：618手机品类奖励" value={ruleName} onChange={e => setRuleName(e.target.value)} /></Form.Item></Col>
-          <Col span={6}><Form.Item label="规则代码" style={{ marginBottom: 0 }}><Input placeholder="自动生成" value={ruleCode} onChange={e => setRuleCode(e.target.value)} /></Form.Item></Col>
-          <Col span={5}><Form.Item label="议程组" style={{ marginBottom: 0 }}><Select value={agendaGroup} onChange={setAgendaGroup} options={AGENDA_GROUPS} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={12}><Form.Item label="规则名称" style={{ marginBottom: 0 }}><Input placeholder="例如：618手机品类奖励" value={ruleName} onChange={e => setRuleName(e.target.value)} /></Form.Item></Col>
+          <Col span={8}><Form.Item label="规则代码" style={{ marginBottom: 0 }}><Input placeholder="自动生成" value={ruleCode} onChange={e => setRuleCode(e.target.value)} /></Form.Item></Col>
         </Row>
       </Card>
 
