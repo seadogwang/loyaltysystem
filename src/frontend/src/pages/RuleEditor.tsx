@@ -17,12 +17,12 @@ const { Panel } = Collapse;
 
 // ==================== 类型 ====================
 
-interface ExtCondition { key: string; field: string; type?: string; op: string; value: string; }
+interface ExtCondition { key: string; field: string; type?: string; format?: string; op: string; value: string; }
 interface TierBonus { key: string; tier: string; bonus: number; }
 interface CategoryWeight { key: string; cat: string; weight: number; }
 interface QuantityTier { key: string; minQty: number; bonus: number; }
 type Option = { label: string; value: string };
-type SchemaField = Option & { type: string };
+type SchemaField = Option & { type: string; format?: string };
 
 // ==================== 常量 ====================
 
@@ -268,14 +268,14 @@ const RuleEditor: React.FC = () => {
   useEffect(() => {
     api.get('/schemas/ORDER').then(({ data }) => {
       const s = data?.data?.schema || data?.data;
-      const fields = Object.entries(s?.properties || {}).map(([k, v]: any) => ({ label: `${v.title || k} (${k})`, value: k, type: v.type || 'string' }));
+      const fields = Object.entries(s?.properties || {}).map(([k, v]: any) => ({ label: `${v.title || k} (${k})`, value: k, type: v.type || 'string', format: v.format || undefined }));
       setOrderSchemaFields(fields);
       if (s?.properties?.trade_status?.enum) setTradeStatusOptions(s.properties.trade_status.enum.map((e: string) => ({ label: e, value: e })));
       if (ruleCategory === 'ORDER') { setSchemaTitle(s?.title || ''); setSchemaFields(fields); }
     }).catch(() => {});
     api.get('/schemas/BEHAVIOR').then(({ data }) => {
       const s = data?.data?.schema || data?.data;
-      const fields = Object.entries(s?.properties || {}).map(([k, v]: any) => ({ label: `${v.title || k} (${k})`, value: k, type: v.type || 'string' }));
+      const fields = Object.entries(s?.properties || {}).map(([k, v]: any) => ({ label: `${v.title || k} (${k})`, value: k, type: v.type || 'string', format: v.format || undefined }));
       setBehaviorSchemaFields(fields);
       if (ruleCategory === 'BEHAVIOR') { setSchemaTitle(s?.title || ''); setSchemaFields(fields); }
     }).catch(() => {});
@@ -452,7 +452,7 @@ const RuleEditor: React.FC = () => {
                   <Button size="small" type="dashed" style={{ fontSize: 11, padding: '0 8px' }}
                     onClick={() => {
                       const idx = extConditions.length;
-                      setExtConditions([...extConditions, { key: String(Date.now()), field: f.value, type: f.type, op: f.type === 'number' ? '>=' : '==', value: '' }]);
+                      setExtConditions([...extConditions, { key: String(Date.now()), field: f.value, type: f.type, format: f.format, op: f.type === 'number' ? '>=' : '==', value: '' }]);
                       setEditingCondIdx(idx);
                       setCurrentStep(1);  // 自动跳转到步骤② 配置条件值
                     }}>
