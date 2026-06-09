@@ -90,6 +90,8 @@ function generateDrl(data: Record<string, any>): string {
   const ruleName = data.ruleName || data.rule_code || 'custom_rule';
   const safeName = ruleName.replace(/[^a-zA-Z0-9_一-龥]/g, '_');
   const agendaGroup = data.agenda_group || 'purchase';
+  const ruleCategory = data.ruleCategory || 'ORDER';
+  const frequencyLimit = data.frequencyLimit || 'unlimited';
   const lines: string[] = [];
 
   lines.push('package com.loyalty.platform.rules;');
@@ -98,6 +100,11 @@ function generateDrl(data: Record<string, any>): string {
   lines.push('import com.loyalty.platform.rules.drl.EventFact;');
   lines.push('import com.loyalty.platform.rules.action.ActionCollector;');
   lines.push('');
+
+  // 频率限制注释
+  if (frequencyLimit !== 'unlimited') {
+    lines.push(`// @frequency: ${frequencyLimit}`);
+  }
   lines.push(`rule "${safeName}"`);
   lines.push(`  agenda-group "${agendaGroup}"`);
   lines.push('  when');
@@ -123,8 +130,8 @@ function generateDrl(data: Record<string, any>): string {
     conditions.push('    $member: MemberFact(memberId == $event.memberId)');
   }
 
-  // 金额条件
-  if (data.minAmount && data.minAmount > 0) {
+  // ORDER 类型: 金额条件
+  if (ruleCategory === 'ORDER' && data.minAmount && data.minAmount > 0) {
     conditions.push(`    eval($event.getPayloadNumber("order_amount") >= ${data.minAmount})`);
   }
 
@@ -154,27 +161,33 @@ function generateDrl(data: Record<string, any>): string {
   const rewardPoints = data.rewardPoints || 0;
   const pointType = data.pointType || 'REWARD_POINTS';
 
-  if (rewardType === 'fixed' && rewardPoints > 0) {
-    actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pointType}", new java.math.BigDecimal(${rewardPoints}), "${safeName}", null);`);
-
-    // 等级额外奖励
-    const tierBonuses: TierBonus[] = data.tierBonuses || [];
-    for (const tb of tierBonuses) {
-      if (!tb.tier || !tb.bonus) continue;
-      actions.push(`    // ${tb.tier} 额外奖励`);
-      actions.push(`    if ("${tb.tier}".equals($member.getTierCode())) {`);
-      actions.push(`      collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pointType}", new java.math.BigDecimal(${tb.bonus}), "${safeName}_TIER", null);`);
-      actions.push('    }');
+  if (ruleCategory === 'ORDER') {
+    // ORDER 类型: 按订单实付金额比例计算积分
+    if (data.ratioPercent && data.ratioPercent > 0) {
+      actions.push(`    java.math.BigDecimal _amount = $event.getPayloadNumber("order_amount");`);
+      actions.push(`    java.math.BigDecimal _points = _amount.multiply(new java.math.BigDecimal("${data.ratioPercent / 100}")).setScale(0, java.math.RoundingMode.DOWN);`);
+      actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pointType}", _points, "${safeName}", null);`);
     }
-  } else if (rewardType === 'ratio' && data.ratioPercent > 0) {
-    actions.push(`    java.math.BigDecimal _amount = $event.getPayloadNumber("order_amount");`);
-    actions.push(`    java.math.BigDecimal _points = _amount.multiply(new java.math.BigDecimal("${data.ratioPercent / 100}"));`);
-    actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pointType}", _points, "${safeName}", null);`);
+    // 最低保底积分
+    if (rewardPoints > 0) {
+      actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pointType}", new java.math.BigDecimal(${rewardPoints}), "${safeName}_BASE", null);`);
+    }
+  } else {
+    // BEHAVIOR 类型: 按行为次数奖励固定积分
+    if (rewardPoints > 0) {
+      actions.push(`    // 行为奖励: ${frequencyLimit}`);
+      actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pointType}", new java.math.BigDecimal(${rewardPoints}), "${safeName}", null);`);
+    }
   }
 
-  // 基础积分
-  if (basePoints > 0) {
-    actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pointType}", new java.math.BigDecimal(${basePoints}), "${safeName}_BASE", null);`);
+  // 等级额外奖励（ORDER 和 BEHAVIOR 通用）
+  const tierBonuses: TierBonus[] = data.tierBonuses || [];
+  for (const tb of tierBonuses) {
+    if (!tb.tier || !tb.bonus) continue;
+    actions.push(`    // ${tb.tier} 额外奖励`);
+    actions.push(`    if ("${tb.tier}".equals($member.getTierCode())) {`);
+    actions.push(`      collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pointType}", new java.math.BigDecimal(${tb.bonus}), "${safeName}_TIER", null);`);
+    actions.push('    }');
   }
 
   if (actions.length === 0) {
@@ -234,6 +247,11 @@ const RuleEditor: React.FC = () => {
           label: e.enum_name || e.enum_code, value: e.enum_code,
         })));
       }
+      if (enums?.channel?.length) {
+        setChannelOptions(enums.channel.map((c: any) => ({
+          label: c.enum_name || c.enum_code, value: c.enum_code,
+        })));
+      }
     }).catch(() => {});
   }, []);
 
@@ -241,6 +259,8 @@ const RuleEditor: React.FC = () => {
   const [ruleCode, setRuleCode] = useState('');
   const [ruleName, setRuleName] = useState('');
   const [agendaGroup, setAgendaGroup] = useState('purchase');
+  const [ruleCategory, setRuleCategory] = useState<'ORDER' | 'BEHAVIOR'>('ORDER');
+  const [frequencyLimit, setFrequencyLimit] = useState<'once' | 'once_per_day' | 'unlimited'>('unlimited');
 
   // ① 基础积分
   const [pointType, setPointType] = useState('REWARD_POINTS');
@@ -290,6 +310,8 @@ const RuleEditor: React.FC = () => {
     ruleName,
     agenda_group: agendaGroup,
     agendaGroup,
+    ruleCategory,
+    frequencyLimit,
     pointType,
     basePoints,
     eventTypes,
@@ -432,6 +454,13 @@ const RuleEditor: React.FC = () => {
 
   const renderStep0 = () => (
     <>
+      <Form.Item label="规则类型" tooltip="订单类按金额比例计算积分，行为类按次数奖励">
+        <Radio.Group value={ruleCategory} onChange={e => setRuleCategory(e.target.value)}>
+          <Radio.Button value="ORDER">订单类 (按金额)</Radio.Button>
+          <Radio.Button value="BEHAVIOR">行为类 (按次数)</Radio.Button>
+        </Radio.Group>
+      </Form.Item>
+
       <Form.Item label="积分类型" tooltip="选择此规则发放的积分类型">
         <Select value={pointType} onChange={setPointType} options={pointTypeOptions} style={{ width: 200 }} />
       </Form.Item>
@@ -441,9 +470,28 @@ const RuleEditor: React.FC = () => {
       <Form.Item label="渠道限制" tooltip="留空表示所有渠道">
         <Checkbox.Group options={channelOptions} value={channels} onChange={v => setChannels(v as string[])} />
       </Form.Item>
-      <Form.Item label="每笔基础积分" tooltip="每次事件触发时奖励的保底积分">
-        <InputNumber min={0} max={10000} value={basePoints} onChange={v => setBasePoints(v || 0)} addonAfter="分" />
-      </Form.Item>
+
+      {ruleCategory === 'BEHAVIOR' && (
+        <Form.Item label="频次限制" tooltip="控制该行为可重复奖励的次数">
+          <Radio.Group value={frequencyLimit} onChange={e => setFrequencyLimit(e.target.value)}>
+            <Radio.Button value="once">仅首次</Radio.Button>
+            <Radio.Button value="once_per_day">每天一次</Radio.Button>
+            <Radio.Button value="unlimited">每次均可</Radio.Button>
+          </Radio.Group>
+        </Form.Item>
+      )}
+
+      {ruleCategory === 'ORDER' ? (
+        <Form.Item label="积分比例" tooltip="按订单实付金额的百分比计算积分">
+          <InputNumber min={0.1} max={100} step={0.1} value={ratioPercent}
+            onChange={v => setRatioPercent(v || 0)} addonAfter="%" style={{ width: 200 }} />
+        </Form.Item>
+      ) : (
+        <Form.Item label="每次奖励积分" tooltip="每次行为触发时奖励的积分">
+          <InputNumber min={1} max={10000} value={rewardPoints}
+            onChange={v => setRewardPoints(v || 0)} addonAfter="分" />
+        </Form.Item>
+      )}
     </>
   );
 
@@ -452,10 +500,13 @@ const RuleEditor: React.FC = () => {
       <Form.Item label="会员等级" tooltip="留空表示所有等级">
         <Checkbox.Group options={tierOptions} value={memberTiers} onChange={v => setMemberTiers(v as string[])} />
       </Form.Item>
-      <Form.Item label="金额条件" tooltip="订单金额门槛，0 表示不限制">
-        <InputNumber min={0} max={999999} value={minAmount} onChange={v => setMinAmount(v || 0)}
-          addonAfter="元" style={{ width: 200 }} prefix="≥" />
+
+      {ruleCategory === 'ORDER' && (
+        <Form.Item label="金额条件" tooltip="订单实付金额门槛，0 表示不限制">
+          <InputNumber min={0} max={999999} value={minAmount} onChange={v => setMinAmount(v || 0)}
+            addonAfter="元" style={{ width: 200 }} prefix="≥" />
       </Form.Item>
+      )}
       <Form.Item label="时间条件" tooltip="限定特定时间段生效">
         <Checkbox.Group options={TIME_CONDITIONS} value={timeConditions} onChange={v => setTimeConditions(v as string[])} />
       </Form.Item>
@@ -509,24 +560,10 @@ const RuleEditor: React.FC = () => {
 
   const renderStep2 = () => (
     <>
-      <Form.Item label="奖励类型">
-        <Radio.Group value={rewardType} onChange={e => setRewardType(e.target.value)}>
-          <Radio.Button value="fixed">固定积分</Radio.Button>
-          <Radio.Button value="ratio">比例积分</Radio.Button>
-        </Radio.Group>
-      </Form.Item>
-
-      {rewardType === 'fixed' && (
-        <Form.Item label="奖励积分" tooltip="满足条件时发放的积分数量">
-          <InputNumber min={1} max={100000} value={rewardPoints} onChange={v => setRewardPoints(v || 0)}
+      {ruleCategory === 'ORDER' && (
+        <Form.Item label="保底积分" tooltip="订单满足条件时至少奖励的积分（选填）">
+          <InputNumber min={0} max={100000} value={rewardPoints} onChange={v => setRewardPoints(v || 0)}
             addonAfter="分" />
-        </Form.Item>
-      )}
-
-      {rewardType === 'ratio' && (
-        <Form.Item label="积分比例" tooltip="按订单金额的百分比计算积分">
-          <InputNumber min={0.1} max={100} step={0.1} value={ratioPercent}
-            onChange={v => setRatioPercent(v || 0)} addonAfter="%" />
         </Form.Item>
       )}
 
