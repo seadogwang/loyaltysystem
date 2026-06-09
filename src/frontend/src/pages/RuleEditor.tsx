@@ -388,12 +388,77 @@ const RuleEditor: React.FC = () => {
         </Space>
       </div>
 
-      {/* 第三行: 选中实体属性 — 全部展开，点击配置 */}
-      <Card size="small" title={<Space><Tag color="blue">{selectedEntity}</Tag>可用属性 ({schemaFields.length})</Space>}>
-        <div style={{ maxHeight: 320, overflow: 'auto' }}>
-          {schemaFields.map(f => renderFieldRow(f))}
+      {/* 第三行: 选中实体属性 — 平铺展示，点击添加到条件列表 */}
+      <Card size="small" title={<Space><Tag color="blue">{selectedEntity}</Tag>可用属性</Space>}
+        extra={<Text type="secondary" style={{ fontSize: 11 }}>点击属性添加为条件</Text>}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {schemaFields.filter(f => f.type !== 'array').map(f => {
+            const added = extConditions.some(c => c.field === f.value);
+            return (
+              <Tag key={f.value}
+                style={{ cursor: 'pointer', fontSize: 12, padding: '2px 10px', border: added ? `1px solid ${f.format === 'date-time' ? '#fa8c16' : f.type === 'number' ? '#1677ff' : '#52c41a'}` : '1px dashed #d9d9d9', background: added ? '#f0f5ff' : '#fff' }}
+                color={added ? (f.type === 'number' ? 'blue' : f.type === 'string' ? 'green' : 'orange') : undefined}
+                onClick={() => {
+                  const exists = extConditions.findIndex(c => c.field === f.value);
+                  if (exists >= 0) {
+                    setEditingCondIdx(exists);
+                  } else {
+                    const newIdx = extConditions.length;
+                    setExtConditions([...extConditions, { key: String(Date.now()), field: f.value, type: f.type, format: f.format, op: f.type === 'number' || f.format ? '>=' : '==', value: '' }]);
+                    setEditingCondIdx(newIdx);
+                  }
+                }}
+              >
+                {added ? '✓ ' : '+ '}{f.label}
+              </Tag>
+            );
+          })}
         </div>
       </Card>
+
+      {/* 已添加的条件 — 内联编辑 */}
+      {extConditions.filter(c => c.field).length > 0 && (
+        <Card size="small" title={<Space><Tag color="green">{extConditions.filter(c => c.field).length}</Tag>已添加的条件</Space>} style={{ marginTop: 12 }}>
+          {extConditions.filter(c => c.field).map((c, i) => {
+            const fm = schemaFields.find(f => f.value === c.field);
+            const isEditing = editingCondIdx === i;
+            return (
+              <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: isEditing ? '6px 8px' : '4px 0', background: isEditing ? '#fffbe6' : 'transparent', borderRadius: 4, flexWrap: 'wrap' }}>
+                <Tag color={c.type === 'number' ? 'blue' : c.format === 'date-time' ? 'orange' : 'green'} style={{ margin: 0, flexShrink: 0 }}>{fm?.label || c.field}</Tag>
+                {isEditing ? (
+                  <>
+                    <Select size="small" value={c.op} options={getOpsForField(c.type, c.format)} style={{ width: c.op?.startsWith('BETWEEN') ? 120 : 70 }}
+                      onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], op: v, value: '', valueEnd: '' }; setExtConditions(n); }} />
+                    {c.op?.startsWith('BETWEEN') ? (
+                      <Space size={4}>
+                        {c.format === 'date-time' ? <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="起始" style={{ width: 150 }} value={c.value ? dayjs(c.value) : null} onChange={(d) => { const n = [...extConditions]; n[i] = { ...n[i], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} /> : <InputNumber size="small" placeholder="起始" style={{ width: 80 }} value={c.value ? Number(c.value) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} />}
+                        <Text type="secondary">~</Text>
+                        {c.format === 'date-time' ? <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="结束" style={{ width: 150 }} value={c.valueEnd ? dayjs(c.valueEnd) : null} onChange={(d) => { const n = [...extConditions]; n[i] = { ...n[i], valueEnd: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} /> : <InputNumber size="small" placeholder="结束" style={{ width: 80 }} value={c.valueEnd ? Number(c.valueEnd) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], valueEnd: String(v ?? '') }; setExtConditions(n); }} />}
+                      </Space>
+                    ) : c.type === 'number' ? (
+                      <InputNumber size="small" placeholder="数值" style={{ width: 100 }} value={c.value ? Number(c.value) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} onPressEnter={() => setEditingCondIdx(null)} />
+                    ) : fm?.enumValues?.length ? (
+                      <Select size="small" style={{ width: 140 }} value={c.value || undefined} options={fm.enumValues.map(e => ({ label: e, value: e }))} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: v }; setExtConditions(n); setEditingCondIdx(null); }} />
+                    ) : c.format === 'date-time' ? (
+                      <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" style={{ width: 170 }} value={c.value ? dayjs(c.value) : null} onChange={(d) => { const n = [...extConditions]; n[i] = { ...n[i], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); setEditingCondIdx(null); }} />
+                    ) : (
+                      <Input size="small" placeholder="输入值" style={{ width: 120 }} value={c.value} onChange={e => { const n = [...extConditions]; n[i] = { ...n[i], value: e.target.value }; setExtConditions(n); }} onPressEnter={() => setEditingCondIdx(null)} />
+                    )}
+                    <Button size="small" type="link" onClick={() => setEditingCondIdx(null)}>确定</Button>
+                    <Button size="small" type="link" danger onClick={() => { setExtConditions(extConditions.filter((_, j) => j !== i)); setEditingCondIdx(null); }}>×</Button>
+                  </>
+                ) : (
+                  <>
+                    <Text style={{ fontSize: 12 }}>{c.op?.startsWith('BETWEEN') ? `${c.op === 'BETWEEN_EQ' ? '区间[含]' : '区间'} ${c.value || '?'} ~ ${c.valueEnd || '?'}` : `${c.op} ${c.value || '(未设置)'}`}</Text>
+                    <Button size="small" type="link" style={{ padding: 0, fontSize: 11 }} onClick={() => setEditingCondIdx(i)}>编辑</Button>
+                    <Button size="small" type="link" danger style={{ padding: 0, fontSize: 11 }} onClick={() => setExtConditions(extConditions.filter((_, j) => j !== i))}>删除</Button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </Card>
+      )}
 
       <Divider style={{ margin: '12px 0' }} />
 
