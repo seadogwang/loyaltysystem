@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card, Form, Input, InputNumber, Select, Button, message, Space, Modal, Tag,
@@ -41,7 +41,8 @@ const OPS = [
   { label: '包含', value: 'contains' },
 ];
 
-const EVENT_TYPES = [
+// 默认值（API 不可用时的降级）
+const DEFAULT_eventTypeOptions = [
   { label: '订单支付', value: 'ORDER_PAID' },
   { label: '签到', value: 'CHECK_IN' },
   { label: '分享', value: 'SHARE' },
@@ -49,29 +50,31 @@ const EVENT_TYPES = [
   { label: '注册', value: 'REGISTER' },
 ];
 
-const CHANNELS = [
+const DEFAULT_channelOptions = [
   { label: '天猫', value: 'TMALL' },
   { label: '京东', value: 'JD' },
   { label: '抖音', value: 'DOUYIN' },
   { label: '微信', value: 'WECHAT_MINI' },
 ];
 
-const TIERS = [
+const DEFAULT_tierOptions = [
   { label: 'BASE', value: 'BASE' },
   { label: 'SILVER', value: 'SILVER' },
   { label: 'GOLD', value: 'GOLD' },
   { label: 'PLATINUM', value: 'PLATINUM' },
 ];
 
-const TIME_CONDITIONS = [
-  { label: '周末', value: 'WEEKEND' },
-  { label: '工作日', value: 'WEEKDAY' },
-];
-
-const POINT_TYPES = [
+const DEFAULT_pointTypeOptions = [
   { label: '消费积分', value: 'REWARD_POINTS' },
   { label: '成长值', value: 'TIER_POINTS' },
   { label: '活动积分', value: 'CAMPAIGN_POINTS' },
+];
+
+type Option = { label: string; value: string };
+
+const TIME_CONDITIONS = [
+  { label: '周末', value: 'WEEKEND' },
+  { label: '工作日', value: 'WEEKDAY' },
 ];
 
 const AGENDA_GROUPS = [
@@ -200,6 +203,39 @@ const RuleEditor: React.FC = () => {
 
   const [currentStep, setCurrentStep] = useState(0);
   const [form] = Form.useForm();
+
+  // 动态选项（从后端 API 加载，降级到 DEFAULT）
+  const [eventTypeOptions, setEventTypeOptions] = useState<Option[]>(DEFAULT_eventTypeOptions);
+  const [channelOptions, setChannelOptions] = useState<Option[]>(DEFAULT_channelOptions);
+  const [tierOptions, setTierOptions] = useState<Option[]>(DEFAULT_tierOptions);
+  const [pointTypeOptions, setPointTypeOptions] = useState<Option[]>(DEFAULT_pointTypeOptions);
+
+  useEffect(() => {
+    // 从 /admin/tiers 获取积分类型和等级
+    api.get('/admin/tiers').then(({ data }) => {
+      const d = data?.data;
+      if (d?.pointTypes?.length) {
+        setPointTypeOptions(d.pointTypes.map((p: any) => ({
+          label: p.name || p.typeCode, value: p.typeCode,
+        })));
+      }
+      if (d?.tiers?.length) {
+        setTierOptions(d.tiers.map((t: any) => ({
+          label: `${t.tierCode} (${t.tierName || ''})`, value: t.tierCode,
+        })));
+      }
+    }).catch(() => {});
+
+    // 从 /admin/cache/enums 获取事件类型
+    api.get('/admin/cache/enums').then(({ data }) => {
+      const enums = data?.data?.enums;
+      if (enums?.event_type?.length) {
+        setEventTypeOptions(enums.event_type.map((e: any) => ({
+          label: e.enum_name || e.enum_code, value: e.enum_code,
+        })));
+      }
+    }).catch(() => {});
+  }, []);
 
   // 表单数据
   const [ruleCode, setRuleCode] = useState('');
@@ -397,13 +433,13 @@ const RuleEditor: React.FC = () => {
   const renderStep0 = () => (
     <>
       <Form.Item label="积分类型" tooltip="选择此规则发放的积分类型">
-        <Select value={pointType} onChange={setPointType} options={POINT_TYPES} style={{ width: 200 }} />
+        <Select value={pointType} onChange={setPointType} options={pointTypeOptions} style={{ width: 200 }} />
       </Form.Item>
       <Form.Item label="事件类型" tooltip="选择哪些事件触发此规则">
-        <Checkbox.Group options={EVENT_TYPES} value={eventTypes} onChange={v => setEventTypes(v as string[])} />
+        <Checkbox.Group options={eventTypeOptions} value={eventTypes} onChange={v => setEventTypes(v as string[])} />
       </Form.Item>
       <Form.Item label="渠道限制" tooltip="留空表示所有渠道">
-        <Checkbox.Group options={CHANNELS} value={channels} onChange={v => setChannels(v as string[])} />
+        <Checkbox.Group options={channelOptions} value={channels} onChange={v => setChannels(v as string[])} />
       </Form.Item>
       <Form.Item label="每笔基础积分" tooltip="每次事件触发时奖励的保底积分">
         <InputNumber min={0} max={10000} value={basePoints} onChange={v => setBasePoints(v || 0)} addonAfter="分" />
@@ -414,7 +450,7 @@ const RuleEditor: React.FC = () => {
   const renderStep1 = () => (
     <>
       <Form.Item label="会员等级" tooltip="留空表示所有等级">
-        <Checkbox.Group options={TIERS} value={memberTiers} onChange={v => setMemberTiers(v as string[])} />
+        <Checkbox.Group options={tierOptions} value={memberTiers} onChange={v => setMemberTiers(v as string[])} />
       </Form.Item>
       <Form.Item label="金额条件" tooltip="订单金额门槛，0 表示不限制">
         <InputNumber min={0} max={999999} value={minAmount} onChange={v => setMinAmount(v || 0)}
@@ -498,7 +534,7 @@ const RuleEditor: React.FC = () => {
       {tierBonuses.map((tb, idx) => (
         <Row gutter={8} key={tb.key} style={{ marginBottom: 8 }}>
           <Col span={10}>
-            <Select value={tb.tier} options={TIERS} style={{ width: '100%' }}
+            <Select value={tb.tier} options={tierOptions} style={{ width: '100%' }}
               onChange={v => {
                 const next = [...tierBonuses];
                 next[idx] = { ...next[idx], tier: v };
