@@ -107,16 +107,16 @@ loyalty:
     # 查询哨兵模式：true=强制所有查询携带 programCode
     query-sentinel-enabled: true
 
-  # LiteFlow 流程编排引擎配置
-  liteflow:
-    # 规则源：本地 EL 文件（生产环境改为 nacos://）
-    rule-source: liteflow/el/*.el.xml
-    # 启用 Spring Bean 注入到组件
-    enable-spring-bean-inject: true
-    # 组件扫描路径
-    component-scan: com.loyalty.platform.flow.components
-    # WHEN 并行最大线程数
-    when-max-workers: 16
-    # 监控日志
-    monitor:
-      enable-log: true
+# LiteFlow 流程编排引擎配置（根级别）
+liteflow:
+  # 规则源：本地 EL 文件（生产环境改为 nacos://）
+  rule-source: liteflow/el/order_chain.el.xml
+  # 启用 Spring Bean 注入到组件
+  enable-spring-bean-inject: true
+  # 组件扫描路径
+  component-scan: com.loyalty.platform.flow.components
+  # WHEN 并行最大线程数
+  when-max-workers: 16
+  # 监控日志
+  monitor:
+    enable-log: true

@@ -18,15 +18,15 @@ import org.springframework.stereotype.Component;
  * 数据补齐后可删除此文件。</p>
  */
 @Component
-public class MobileUniqueKeyBackfillRunner implements CommandLineRunner {
+public class MobileUniqueKeyBackfillRunner {
 
     private static final Logger log = LoggerFactory.getLogger(MobileUniqueKeyBackfillRunner.class);
 
     @PersistenceContext
     private EntityManager em;
 
-    @Override
-    public void run(String... args) {
+    /** 手动调用此方法执行回填（已废弃，仅保留代码供参考） */
+    public void executeBackfill() {
         log.info("[Backfill] 开始回填 MOBILE_PLAIN 唯一键...");
 
         // 1. 查找 ext_attributes 中有 mobile 或 phone 的所有会员
@@ -37,7 +37,7 @@ public class MobileUniqueKeyBackfillRunner implements CommandLineRunner {
                        '[^0-9]', '', 'g'
                    ) AS raw_digits
             FROM member m
-            WHERE m.ext_attributes ?| ARRAY['mobile', 'phone']
+            WHERE jsonb_exists_any(m.ext_attributes, ARRAY['mobile', 'phone'])
             """);
 
         @SuppressWarnings("unchecked")
