@@ -351,7 +351,7 @@ const RuleEditor: React.FC = () => {
   };
 
   const steps = [
-    { title: '实体配置', icon: <SettingOutlined /> },
+    { title: '基础规则配置', icon: <SettingOutlined /> },
     { title: 'AI 活动', icon: <ThunderboltOutlined /> },
   ];
 
@@ -588,17 +588,11 @@ const RuleEditor: React.FC = () => {
       </Card>
 
       <Card size="small" style={{ marginBottom: 16 }}>
-        <Steps current={currentStep} size="small" labelPlacement="vertical">
-          {steps.map((s, i) => (<Steps.Step key={i} title={s.title} icon={s.icon} />))}
-        </Steps>
+        {stepContent[0]}
       </Card>
 
-      <Card title={<Space>{steps[currentStep].icon}{steps[currentStep].title}</Space>} style={{ marginBottom: 16, minHeight: 260 }}
-        extra={<Space>
-          {currentStep > 0 && <Button icon={<LeftOutlined />} onClick={() => setCurrentStep(currentStep - 1)}>上一步</Button>}
-          {currentStep < 2 ? <Button type="primary" icon={<RightOutlined />} onClick={() => setCurrentStep(currentStep + 1)}>下一步</Button> : <Button type="primary" icon={<CheckOutlined />} onClick={handleSave}>完成配置</Button>}
-        </Space>}>
-        {stepContent[currentStep]}
+      <Card size="small" title={<Space><ThunderboltOutlined />AI 活动规则</Space>} style={{ marginBottom: 16 }}>
+        {stepContent[1]}
       </Card>
 
       <Collapse activeKey={scriptExpanded ? ['s'] : []} onChange={ks => setScriptExpanded(ks.includes('s'))} style={{ background: '#fafafa' }}>
