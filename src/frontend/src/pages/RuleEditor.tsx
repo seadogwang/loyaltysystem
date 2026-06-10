@@ -358,19 +358,8 @@ const RuleEditor: React.FC = () => {
   const stepContent = [
     // ① 业务实体配置
     <div key="s0">
-      {/* 第一行: 规则组 + 优先级 */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={8}>
-          <Form.Item label="规则组" tooltip="同一规则组内的规则按优先级排序执行" style={{ marginBottom: 0 }}>
-            <Select value={agendaGroup} onChange={setAgendaGroup} options={AGENDA_GROUPS} style={{ width: '100%' }} />
-          </Form.Item>
-        </Col>
-        <Col span={8}>
-          <Form.Item label="优先级" tooltip="同规则组内数字越大越先执行" style={{ marginBottom: 0 }}>
-            <InputNumber min={0} max={1000} value={salience} onChange={v => setSalience(v || 0)} style={{ width: '100%' }} />
-          </Form.Item>
-        </Col>
-        {selectedEntity === 'BEHAVIOR' && (
+      {selectedEntity === 'BEHAVIOR' && (
+        <Row gutter={16} style={{ marginBottom: 16 }}>
           <Col span={8}>
             <Form.Item label="频次限制" style={{ marginBottom: 0 }}>
               <Radio.Group value={frequencyLimit} onChange={e => setFrequencyLimit(e.target.value)} size="small">
@@ -380,10 +369,10 @@ const RuleEditor: React.FC = () => {
               </Radio.Group>
             </Form.Item>
           </Col>
-        )}
-      </Row>
+        </Row>
+      )}
 
-      {/* 第二行: 业务实体选择 — 全部展示，点击选中 */}
+      {/* 业务实体选择 — 全部展示，点击选中 */}
       <div style={{ marginBottom: 12 }}>
         <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>业务实体</Text>
         <Space wrap>
@@ -591,8 +580,10 @@ const RuleEditor: React.FC = () => {
 
       <Card size="small" style={{ marginBottom: 16 }}>
         <Row gutter={16}>
-          <Col span={12}><Form.Item label="规则名称" style={{ marginBottom: 0 }}><Input placeholder="例如：618手机品类奖励" value={ruleName} onChange={e => setRuleName(e.target.value)} /></Form.Item></Col>
-          <Col span={8}><Form.Item label="规则代码" style={{ marginBottom: 0 }}><Input placeholder="自动生成" value={ruleCode} onChange={e => setRuleCode(e.target.value)} /></Form.Item></Col>
+          <Col span={6}><Form.Item label="规则名称" style={{ marginBottom: 0 }}><Input placeholder="例如：618手机品类奖励" value={ruleName} onChange={e => setRuleName(e.target.value)} /></Form.Item></Col>
+          <Col span={6}><Form.Item label="规则代码" style={{ marginBottom: 0 }}><Input placeholder="自动生成" value={ruleCode} onChange={e => setRuleCode(e.target.value)} /></Form.Item></Col>
+          <Col span={6}><Form.Item label="规则组" style={{ marginBottom: 0 }}><Select value={agendaGroup} onChange={setAgendaGroup} options={AGENDA_GROUPS} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={6}><Form.Item label="优先级" style={{ marginBottom: 0 }}><InputNumber min={0} max={1000} value={salience} onChange={v => setSalience(v || 0)} style={{ width: '100%' }} /></Form.Item></Col>
         </Row>
       </Card>
 
