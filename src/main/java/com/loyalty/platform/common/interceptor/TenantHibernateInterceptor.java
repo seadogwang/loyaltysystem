@@ -100,7 +100,10 @@ public class TenantHibernateInterceptor implements StatementInspector {
                 // 判断 SQL 语句类型，决定追加方式
                 String clause = matcher.group(1).toUpperCase();
 
-                if ("UPDATE".equals(clause)) {
+                if ("INTO".equals(clause)) {
+                    // INSERT INTO — skip, program_code is set by entity field
+                    continue;
+                } else if ("UPDATE".equals(clause)) {
                     // UPDATE table SET ... WHERE ...
                     modified = appendTenantCondition(modifiedSql, sql, "WHERE") || modified;
                 } else if ("DELETE".equals(clause)) {
