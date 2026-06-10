@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Table, Tag, Button, Space, Tabs, Card, Typography, message, Popconfirm } from 'antd';
+import { Table, Tag, Button, Space, Tabs, Typography, message, Popconfirm } from 'antd';
 import {
   PlusOutlined, EditOutlined, ExperimentOutlined, ThunderboltOutlined,
   PauseCircleOutlined, PlayCircleOutlined, SettingOutlined,
@@ -68,53 +68,36 @@ const RuleList: React.FC = () => {
     {
       key: 'base',
       label: <Space><SettingOutlined />俱乐部基础规则</Space>,
-      children: (() => {
-        const baseRule = baseRules.length > 0 ? baseRules[0] : null;
-        return (
+      children: (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>俱乐部长期有效的基础积分规则，通常每年调整一次</Text>
-            {!baseRule ? (
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/rules/new?type=base')}>
-                配置基础规则
-              </Button>
-            ) : (
-              <Button icon={<EditOutlined />} onClick={() => navigate(`/rules/${baseRule.id}/edit?type=base`)}>
-                编辑基础规则
-              </Button>
-            )}
+            <Text type="secondary" style={{ fontSize: 12 }}>俱乐部基础积分规则，支持多条规则配置</Text>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/rules/new?type=base')}>
+              配置基础规则
+            </Button>
           </div>
-
-          {baseRule ? (
-            <Card size="small" style={{ background: '#f6ffed', border: '1px solid #b7eb8f' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Table dataSource={baseRules} columns={[
+            { title: '名称', dataIndex: 'rule_name', width: 180 },
+            { title: '代码', dataIndex: 'rule_code', width: 120 },
+            { title: '议程组', dataIndex: 'agenda_group', width: 100, render: (v: string) => <Tag color="blue">{v || 'default'}</Tag> },
+            { title: '状态', dataIndex: 'status', width: 90, render: (v: string) => <Tag color={v === 'ACTIVE' ? 'green' : v === 'DRAFT' ? 'orange' : 'default'}>{v}</Tag> },
+            { title: '更新时间', dataIndex: 'updated_at', width: 150 },
+            {
+              title: '操作', key: 'actions', width: 200,
+              render: (_: any, record: any) => (
                 <Space>
-                  <Tag color="green" style={{ fontSize: 13 }}>{baseRule.status}</Tag>
-                  <Text strong>{baseRule.rule_name || baseRule.rule_code}</Text>
-                  <Tag color="blue">{baseRule.agenda_group || 'purchase'}</Tag>
-                  <Text type="secondary" style={{ fontSize: 12 }}>更新于 {baseRule.updated_at}</Text>
+                  <Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/rules/${record.id}/edit?type=base`)} />
+                  <Popconfirm title={`确定${record.status === 'ACTIVE' ? '停用' : '启用'}?`} onConfirm={() => handleToggleStatus(record.id, record.status)}>
+                    <Button size="small" icon={record.status === 'ACTIVE' ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+                      danger={record.status === 'ACTIVE'}>{record.status === 'ACTIVE' ? '停用' : '启用'}</Button>
+                  </Popconfirm>
                 </Space>
-                <Space>
-                  <Button size="small" onClick={() => navigate(`/rules/${baseRule.id}/test`)}>沙箱测试</Button>
-                  {baseRule.status === 'ACTIVE' ? (
-                    <Button size="small" danger onClick={() => handleToggleStatus(baseRule.id, baseRule.status)}>停用</Button>
-                  ) : (
-                    <Button size="small" type="primary" onClick={() => handleToggleStatus(baseRule.id, baseRule.status)}>启用</Button>
-                  )}
-                </Space>
-              </div>
-            </Card>
-          ) : (
-            <Card size="small" style={{ textAlign: 'center', padding: 40 }}>
-              <Text type="secondary">尚未配置俱乐部基础规则</Text>
-              <br />
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/rules/new?type=base')} style={{ marginTop: 12 }}>
-                配置基础规则
-              </Button>
-            </Card>
-          )}
+              ),
+            },
+          ]} loading={loading} rowKey="id" size="small" pagination={{ pageSize: 10 }}
+            locale={{ emptyText: '尚未配置基础规则，点击上方按钮新建' }} />
         </div>
-      );})(),
+      ),
     },
     {
       key: 'campaign',
