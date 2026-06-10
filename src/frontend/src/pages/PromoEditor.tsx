@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card, Form, Input, InputNumber, Select, Button, message, Space, Tag,
-  Typography, Divider, Table, Checkbox, Radio, Row, Col, DatePicker, Collapse,
+  Typography, Divider, Table, Checkbox, Radio, Row, Col, DatePicker, Collapse, Tabs,
 } from 'antd';
 import {
   SaveOutlined, SendOutlined, PlusOutlined, DeleteOutlined,
@@ -25,6 +25,7 @@ interface ExtCondition {
 interface RewardStep {
   key: string; lower: number; upper?: number; multiplier: number; isCycleThreshold: boolean;
   lowerInclusive: boolean; upperInclusive: boolean;
+  rewardType: 'multiplier' | 'fixed';
 }
 
 const ENTITY_OPTIONS: Option[] = [
@@ -76,9 +77,18 @@ const PromoEditor: React.FC = () => {
   const [extConditions, setExtConditions] = useState<ExtCondition[]>([]);
   const [editingCondIdx, setEditingCondIdx] = useState<number | null>(null);
 
-  // 奖励规则
+  // 奖励配置 Tab
+  const [rewardTab, setRewardTab] = useState<string>('simple');
+
+  // 奖励规则 — 简单模式
+  const [calcMode, setCalcMode] = useState<string>('HEADER');
+  const [simpleType, setSimpleType] = useState<string>('MULTIPLIER');
+  const [simpleMultiplier, setSimpleMultiplier] = useState(2.0);
+  const [simpleFixedPoints, setSimpleFixedPoints] = useState(100);
+
+  // 奖励规则 — 阶梯模式
   const [steps, setSteps] = useState<RewardStep[]>([
-    { key: '1', lower: 0, upper: undefined, multiplier: 1.0, isCycleThreshold: false, lowerInclusive: true, upperInclusive: false },
+    { key: '1', lower: 0, upper: undefined, multiplier: 1.0, isCycleThreshold: false, lowerInclusive: true, upperInclusive: false, rewardType: 'multiplier' },
   ]);
   const [cycleMode, setCycleMode] = useState<string>('SINGLE_MATCH');
   const [remainderMode, setRemainderMode] = useState<string>('USE_STEP_MULTIPLIER');
@@ -154,7 +164,7 @@ const PromoEditor: React.FC = () => {
   
   const addStep = () => {
     const lastStep = steps[steps.length - 1];
-    setSteps([...steps, { key: String(Date.now()), lower: lastStep.upper || 0, upper: undefined, multiplier: 1.0, isCycleThreshold: false, lowerInclusive: true, upperInclusive: false }]);
+    setSteps([...steps, { key: String(Date.now()), lower: lastStep.upper || 0, upper: undefined, multiplier: 1.0, isCycleThreshold: false, lowerInclusive: true, upperInclusive: false, rewardType: 'multiplier' }]);
   };
 
   const removeStep = (key: string) => {
@@ -168,27 +178,23 @@ const PromoEditor: React.FC = () => {
     selectedEntity,
     extConditions,
     entity_conditions: extConditions.filter(c => c.field).map(c => ({
-      entity: c.entity,
-      attribute: c.field,
-      operator: c.op,
-      type: c.type,
+      entity: c.entity, attribute: c.field, operator: c.op, type: c.type,
       value: c.op?.startsWith('BETWEEN') ? { min: Number(c.value), max: Number(c.valueEnd) } : c.value,
     })),
-    effective_time_range: {
-      start: effectiveStart || null,
-      end: isPermanent ? null : (effectiveEnd || null),
-    },
-    reward: {
+    effective_time_range: { start: effectiveStart || null, end: isPermanent ? null : (effectiveEnd || null) },
+    reward: rewardTab === 'simple' ? {
+      calc_mode: calcMode,
+      type: 'SIMPLE',
+      simple_type: simpleType,
+      simple_multiplier: simpleType === 'MULTIPLIER' ? simpleMultiplier : undefined,
+      simple_fixed_points: simpleType === 'FIXED_POINTS' ? simpleFixedPoints : undefined,
+      perOrderLimit, accumulativeLimit,
+    } : {
+      calc_mode: calcMode,
+      type: 'STEP_CYCLE',
       steps: steps.map(s => ({ lower: s.lower, upper: s.upper, multiplier: s.multiplier, isCycleThreshold: s.isCycleThreshold })),
-      cycleMode,
-      cycleThresholdOrder: cycleThresholds,
-      remainderMode,
-      remainderFixedMultiplier: remainderFixedMult,
-      perOrderLimit: perOrderLimit,
-      accumulativeLimit: accumulativeLimit,
-      excessStrategy,
-      downgradeMultiplier,
-      downgradeContinueCycle,
+      cycleMode, cycleThresholdOrder: cycleThresholds, remainderMode, remainderFixedMultiplier: remainderFixedMult,
+      perOrderLimit, accumulativeLimit, excessStrategy, downgradeMultiplier, downgradeContinueCycle,
     },
   });
 
@@ -366,50 +372,88 @@ const PromoEditor: React.FC = () => {
         </Card>
       )}
 
-      {/* 奖励规则 */}
-      <Card size="small" title="奖励规则（阶梯）" extra={<Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addStep}>添加区间</Button>} style={{ marginBottom: 16 }}>
-        <Table dataSource={steps} columns={stepColumns} rowKey="key" size="small" pagination={false} />
-        <Text type="secondary" style={{ fontSize: 11 }}>上限为空表示无上限；"循环点"仅在启用循环扣除时显示</Text>
+      {/* 奖励配置 Tab */}
+      <Card size="small" style={{ marginBottom: 16 }}
+        tabList={[
+          { key: 'simple', tab: '奖励配置（简单模式）' },
+          { key: 'step', tab: '阶梯奖励配置' },
+        ]}
+        activeTabKey={rewardTab}
+        onTabChange={k => setRewardTab(k)}>
+        {rewardTab === 'simple' ? (
+          <div>
+            <Form.Item label="计算范围" style={{ marginBottom: 8 }}>
+              <Radio.Group value={calcMode} onChange={e => setCalcMode(e.target.value)} size="small">
+                <Radio.Button value="HEADER">订单头计算</Radio.Button>
+                <Radio.Button value="LINE">订单明细计算</Radio.Button>
+              </Radio.Group>
+              <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
+                {calcMode === 'HEADER' ? '(基于整笔订单总金额)' : '(基于每个商品行，退单时按行处理)'}
+              </Text>
+            </Form.Item>
+            <Divider style={{ margin: '8px 0' }} />
+            <Form.Item label="奖励方式" style={{ marginBottom: 8 }}>
+              <Radio.Group value={simpleType} onChange={e => setSimpleType(e.target.value)} size="small">
+                <Radio.Button value="MULTIPLIER">按比例倍数</Radio.Button>
+                <Radio.Button value="FIXED_POINTS">固定积分值</Radio.Button>
+              </Radio.Group>
+            </Form.Item>
+            {simpleType === 'MULTIPLIER' ? (
+              <Form.Item label="奖励倍数" style={{ marginBottom: 8 }}>
+                <InputNumber size="small" min={0.1} step={0.1} value={simpleMultiplier} onChange={v => setSimpleMultiplier(v || 0.1)} addonAfter="倍" />
+              </Form.Item>
+            ) : (
+              <Form.Item label="奖励积分" style={{ marginBottom: 8 }}>
+                <InputNumber size="small" min={1} value={simpleFixedPoints} onChange={v => setSimpleFixedPoints(v || 0)} addonAfter={calcMode === 'HEADER' ? '分/单' : '分/件'} />
+              </Form.Item>
+            )}
+          </div>
+        ) : (
+          <div>
+            <Form.Item label="计算范围" style={{ marginBottom: 8 }}>
+              <Radio.Group value={calcMode} onChange={e => setCalcMode(e.target.value)} size="small" disabled>
+                <Radio.Button value="HEADER">订单头计算</Radio.Button>
+              </Radio.Group>
+              <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>(阶梯模式暂只支持订单头计算)</Text>
+            </Form.Item>
+            <Divider style={{ margin: '8px 0' }} />
+            <Table dataSource={steps} columns={stepColumns} rowKey="key" size="small" pagination={false}
+              title={() => <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addStep}>添加区间</Button>} />
+            <Collapse ghost style={{ marginTop: 8 }} items={[{
+              key: 'cycle', label: <Space><Checkbox checked={cycleMode === 'THRESHOLD_LOOP'} onChange={e => setCycleMode(e.target.checked ? 'THRESHOLD_LOOP' : 'SINGLE_MATCH')}>启用循环扣除</Checkbox></Space>,
+              children: (<div>
+                <Form.Item label="循环分段点（从高到低）" style={{ marginBottom: 8 }}>
+                  {cycleThresholds.map((t, i) => <Tag key={i} color="blue" style={{ marginRight: 4 }}>{t}</Tag>)}
+                  {cycleThresholds.length === 0 && <Text type="secondary">请在阶梯表格中勾选"循环点"</Text>}
+                </Form.Item>
+                <Form.Item label="剩余金额处理" style={{ marginBottom: 0 }}>
+                  <Radio.Group value={remainderMode} onChange={e => setRemainderMode(e.target.value)}>
+                    <Radio value="USE_STEP_MULTIPLIER">按阶梯倍数</Radio>
+                    <Radio value="FIXED_MULTIPLIER">固定倍数</Radio>
+                  </Radio.Group>
+                  {remainderMode === 'FIXED_MULTIPLIER' && <InputNumber size="small" min={0.1} step={0.1} value={remainderFixedMult} onChange={v => setRemainderFixedMult(v || 0.1)} style={{ marginLeft: 8 }} />}
+                </Form.Item>
+              </div>),
+            }]} />
+          </div>
+        )}
       </Card>
 
-      {/* 循环扣除配置 */}
-      <Collapse ghost style={{ marginBottom: 16 }} items={[{
-        key: 'cycle', label: <Space><Checkbox checked={cycleMode === 'THRESHOLD_LOOP'} onChange={e => setCycleMode(e.target.checked ? 'THRESHOLD_LOOP' : 'SINGLE_MATCH')}>启用循环扣除</Checkbox></Space>,
-        children: (
-          <div>
-            <Form.Item label="循环分段点（从高到低）" style={{ marginBottom: 8 }}>
-              {cycleThresholds.map((t, i) => <Tag key={i} color="blue" style={{ marginRight: 4 }}>{t}</Tag>)}
-              {cycleThresholds.length === 0 && <Text type="secondary">请在阶梯表格中勾选"循环点"</Text>}
-            </Form.Item>
-            <Form.Item label="剩余金额处理" style={{ marginBottom: 0 }}>
-              <Radio.Group value={remainderMode} onChange={e => setRemainderMode(e.target.value)}>
-                <Radio value="USE_STEP_MULTIPLIER">按阶梯倍数</Radio>
-                <Radio value="FIXED_MULTIPLIER">固定倍数</Radio>
-              </Radio.Group>
-              {remainderMode === 'FIXED_MULTIPLIER' && <InputNumber size="small" min={0.1} step={0.1} value={remainderFixedMult} onChange={v => setRemainderFixedMult(v || 0.1)} style={{ marginLeft: 8 }} />}
-            </Form.Item>
-          </div>
-        ),
-      }]} />
-
-      {/* 上限控制 */}
+      {/* 上限控制 — 两种模式共享 */}
       <Card size="small" title="上限控制" style={{ marginBottom: 16 }}>
         <Row gutter={16}>
           <Col span={8}><Form.Item label="单笔上限" style={{ marginBottom: 0 }}><InputNumber size="small" min={0} value={perOrderLimit} onChange={v => setPerOrderLimit(v || undefined)} addonAfter="分" style={{ width: '100%' }} placeholder="不限" /></Form.Item></Col>
           <Col span={8}><Form.Item label="累计上限" style={{ marginBottom: 0 }}><InputNumber size="small" min={0} value={accumulativeLimit} onChange={v => setAccumulativeLimit(v || undefined)} addonAfter="分" style={{ width: '100%' }} placeholder="不限" /></Form.Item></Col>
         </Row>
-        {(accumulativeLimit || 0) > 0 && (
+        {rewardTab === 'step' && (accumulativeLimit || 0) > 0 && (
           <>
             <Divider style={{ margin: '8px 0' }} />
             <Form.Item label="超限策略" style={{ marginBottom: 0 }}>
-              <Select size="small" value={excessStrategy} options={EXCESS_STRATEGIES} style={{ width: 200 }}
-                onChange={v => setExcessStrategy(v)} />
+              <Select size="small" value={excessStrategy} options={EXCESS_STRATEGIES} style={{ width: 200 }} onChange={v => setExcessStrategy(v)} />
             </Form.Item>
             {excessStrategy === 'TRUNCATE_AND_DOWNGRADE' && (
               <div style={{ marginTop: 8 }}>
-                <Form.Item label="降级倍数" style={{ marginBottom: 4 }}>
-                  <InputNumber size="small" min={0} step={0.1} value={downgradeMultiplier} onChange={v => setDowngradeMultiplier(v || 0)} />
-                </Form.Item>
+                <Form.Item label="降级倍数" style={{ marginBottom: 4 }}><InputNumber size="small" min={0} step={0.1} value={downgradeMultiplier} onChange={v => setDowngradeMultiplier(v || 0)} /></Form.Item>
                 <Checkbox checked={downgradeContinueCycle} onChange={e => setDowngradeContinueCycle(e.target.checked)}>降级后继续循环</Checkbox>
               </div>
             )}
