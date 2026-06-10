@@ -375,7 +375,7 @@ const PromoEditor: React.FC = () => {
       {/* 奖励配置 Tab */}
       <Card size="small" style={{ marginBottom: 16 }}
         tabList={[
-          { key: 'simple', tab: '奖励配置（简单模式）' },
+          { key: 'simple', tab: '奖励配置' },
           { key: 'step', tab: '阶梯奖励配置' },
         ]}
         activeTabKey={rewardTab}
