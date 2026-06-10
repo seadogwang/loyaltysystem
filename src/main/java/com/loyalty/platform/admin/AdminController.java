@@ -11,6 +11,8 @@ import com.loyalty.platform.domain.repository.ProgramRepository;
 import com.loyalty.platform.domain.repository.RuleDefinitionRepository;
 import com.loyalty.platform.domain.repository.TierDefinitionRepository;
 import com.loyalty.platform.flow.EventContext;
+import com.loyalty.platform.activity.StepCycleCalculator;
+import com.loyalty.platform.activity.UnifiedPromoDrlGenerator;
 import com.loyalty.platform.rules.AiRuleGenerationService;
 import com.loyalty.platform.rules.DroolsTestRunner;
 import com.loyalty.platform.rules.KieBaseCacheManager;
@@ -60,6 +62,7 @@ public class AdminController {
     private final DroolsTestRunner droolsTestRunner;
     private final FlowDefinitionRepository flowDefRepo;
     private final FlowExecutor flowExecutor;
+    private final UnifiedPromoDrlGenerator promoDrlGenerator;
 
     public AdminController(AiRuleGenerationService aiRuleGen,
                            ProgramRepository programRepo,
@@ -73,7 +76,8 @@ public class AdminController {
                            KieBaseCacheManager kieBaseCacheManager,
                            DroolsTestRunner droolsTestRunner,
                            FlowDefinitionRepository flowDefRepo,
-                           FlowExecutor flowExecutor) {
+                           FlowExecutor flowExecutor,
+                           UnifiedPromoDrlGenerator promoDrlGenerator) {
         this.aiRuleGen = aiRuleGen;
         this.programRepo = programRepo;
         this.pointTypeRepo = pointTypeRepo;
@@ -87,6 +91,7 @@ public class AdminController {
         this.droolsTestRunner = droolsTestRunner;
         this.flowDefRepo = flowDefRepo;
         this.flowExecutor = flowExecutor;
+        this.promoDrlGenerator = promoDrlGenerator;
     }
 
     @GetMapping("/cache/enums")
@@ -522,6 +527,12 @@ public class AdminController {
         boolean forceOverride = body != null && Boolean.TRUE.equals(body.get("forceOverride"));
         String reason = body != null ? (String) body.get("reason") : null;
 
+        // 对于 promo 规则，从 metadata 生成 DRL
+        if ("ACTIVITY_PROMO".equals(rule.getRuleType())) {
+            String generatedDrl = promoDrlGenerator.generate(rule);
+            rule.setDrlContent(generatedDrl);
+        }
+
         // 执行沙箱回归测试（使用 buildKieBaseWithDraft 对比 Baseline vs Candidate）
         Map<String, Object> report = new LinkedHashMap<>();
         try {
@@ -910,6 +921,61 @@ public class AdminController {
                 .setParameter(1, pc).setParameter(2, limit)
                 .getResultList();
         return ResponseEntity.ok(ApiResponse.success(logs));
+    }
+
+    // ==================== 积分活动预览 ====================
+
+    @PostMapping("/rules/preview")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> previewReward(
+            @RequestBody Map<String, Object> body) {
+        BigDecimal orderAmount = toBigDecimal(body.get("orderAmount"));
+        BigDecimal alreadyRewarded = toBigDecimal(body.getOrDefault("alreadyRewarded", 0));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> reward = (Map<String, Object>) body.getOrDefault("reward", Map.of());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> stepsRaw = (List<Map<String, Object>>) reward.getOrDefault("steps", List.of());
+
+        List<StepCycleCalculator.Step> steps = stepsRaw.stream().map(s -> {
+            BigDecimal lower = toBigDecimal(s.get("lower"));
+            Object upperRaw = s.get("upper");
+            BigDecimal upper = upperRaw != null && !String.valueOf(upperRaw).isBlank() ? toBigDecimal(upperRaw) : null;
+            BigDecimal multiplier = toBigDecimal(s.get("multiplier"));
+            boolean isCycle = Boolean.TRUE.equals(s.get("isCycleThreshold"));
+            return new StepCycleCalculator.Step(lower, upper, multiplier, isCycle);
+        }).toList();
+
+        String cycleMode = (String) reward.getOrDefault("cycleMode", "SINGLE_MATCH");
+        @SuppressWarnings("unchecked")
+        List<Number> thresholdsRaw = (List<Number>) reward.getOrDefault("cycleThresholdOrder", List.of());
+        List<BigDecimal> cycleThresholds = thresholdsRaw.stream().map(n -> new BigDecimal(n.toString())).toList();
+
+        BigDecimal perOrderLimit = reward.containsKey("perOrderLimit") ? toBigDecimal(reward.get("perOrderLimit")) : null;
+        BigDecimal accumulativeLimit = reward.containsKey("accumulativeLimit") ? toBigDecimal(reward.get("accumulativeLimit")) : null;
+        String excessStrategy = (String) reward.getOrDefault("excessStrategy", "STOP");
+        BigDecimal downgradeMultiplier = toBigDecimal(reward.getOrDefault("downgradeMultiplier", 1.0));
+
+        StepCycleCalculator.PreviewResult result = StepCycleCalculator.preview(
+                orderAmount, alreadyRewarded, steps, cycleMode, cycleThresholds,
+                perOrderLimit, accumulativeLimit, excessStrategy, downgradeMultiplier);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("orderAmount", orderAmount);
+        data.put("alreadyRewarded", alreadyRewarded);
+        data.put("finalPoints", result.finalPoints());
+        data.put("theoreticalTotal", result.theoreticalTotal());
+        data.put("afterPerOrderCap", result.afterPerOrderCap());
+        data.put("remainingCap", result.remainingCap());
+        data.put("newTotal", result.newTotal());
+        data.put("segments", result.theoreticalSegments().stream().map(seg -> {
+            Map<String, Object> sm = new LinkedHashMap<>();
+            sm.put("amount", seg.amount());
+            sm.put("multiplier", seg.multiplier());
+            sm.put("points", seg.points());
+            return sm;
+        }).toList());
+
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     // ==================== 强制放行 ====================
