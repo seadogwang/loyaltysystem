@@ -590,15 +590,13 @@ const RuleEditor: React.FC = () => {
       </div>
 
       <Card size="small" style={{ marginBottom: 16 }}>
-        <Row gutter={16}>
-          <Col span={6}><Form.Item label="规则名称" style={{ marginBottom: 0 }}><Input placeholder="例如：618手机品类奖励" value={ruleName} onChange={e => setRuleName(e.target.value)} /></Form.Item></Col>
-          <Col span={6}><Form.Item label="规则代码" style={{ marginBottom: 0 }}><Input placeholder="自动生成" value={ruleCode} onChange={e => setRuleCode(e.target.value)} /></Form.Item></Col>
-          <Col span={6}><Form.Item label="规则组" style={{ marginBottom: 0 }}><Select value={agendaGroup} onChange={setAgendaGroup} options={AGENDA_GROUPS} style={{ width: '100%' }} /></Form.Item></Col>
-          <Col span={6}><Form.Item label="优先级" style={{ marginBottom: 0 }}><InputNumber min={0} max={1000} value={salience} onChange={v => setSalience(v || 0)} style={{ width: '100%' }} /></Form.Item></Col>
-        </Row>
-        <Row gutter={16} style={{ marginTop: 8 }}>
-          <Col span={6}><Form.Item label="启用时间" style={{ marginBottom: 0 }}><DatePicker size="small" placeholder="立即生效" value={effectiveFrom ? dayjs(effectiveFrom) : null} onChange={d => setEffectiveFrom(d ? d.format('YYYY-MM-DD HH:mm:ss') : '')} style={{ width: '100%' }} /></Form.Item></Col>
-          <Col span={6}><Form.Item label="停用时间" style={{ marginBottom: 0 }}><DatePicker size="small" placeholder="不填=永久有效" value={effectiveTo ? dayjs(effectiveTo) : null} onChange={d => setEffectiveTo(d ? d.format('YYYY-MM-DD HH:mm:ss') : '')} style={{ width: '100%' }} /></Form.Item></Col>
+        <Row gutter={8}>
+          <Col span={4}><Form.Item label="规则名称" style={{ marginBottom: 0 }}><Input size="small" placeholder="例如：618手机品类奖励" value={ruleName} onChange={e => setRuleName(e.target.value)} /></Form.Item></Col>
+          <Col span={3}><Form.Item label="规则代码" style={{ marginBottom: 0 }}><Input size="small" placeholder="自动生成" value={ruleCode} onChange={e => setRuleCode(e.target.value)} /></Form.Item></Col>
+          <Col span={3}><Form.Item label="规则组" style={{ marginBottom: 0 }}><Select size="small" value={agendaGroup} onChange={setAgendaGroup} options={AGENDA_GROUPS} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={2}><Form.Item label="优先级" style={{ marginBottom: 0 }}><InputNumber size="small" min={0} max={1000} value={salience} onChange={v => setSalience(v || 0)} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={5}><Form.Item label="启用时间" style={{ marginBottom: 0 }}><DatePicker size="small" placeholder="立即生效" value={effectiveFrom ? dayjs(effectiveFrom) : null} onChange={d => setEffectiveFrom(d ? d.format('YYYY-MM-DD HH:mm:ss') : '')} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={5}><Form.Item label="停用时间" style={{ marginBottom: 0 }}><DatePicker size="small" placeholder="不填=永久" value={effectiveTo ? dayjs(effectiveTo) : null} onChange={d => setEffectiveTo(d ? d.format('YYYY-MM-DD HH:mm:ss') : '')} style={{ width: '100%' }} /></Form.Item></Col>
         </Row>
       </Card>
 
