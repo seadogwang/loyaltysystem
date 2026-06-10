@@ -243,7 +243,7 @@ const PromoEditor: React.FC = () => {
     { title: '下限', dataIndex: 'lower', width: 80, render: (v: number, _: any, i: number) => <InputNumber size="small" min={0} value={v} style={{ width: 70 }} onChange={val => { const n = [...steps]; n[i] = { ...n[i], lower: val || 0 }; setSteps(n); }} /> },
     { title: '上限', dataIndex: 'upper', width: 80, render: (v: number | undefined, _: any, i: number) => <InputNumber size="small" min={0} value={v} placeholder="不限" style={{ width: 70 }} onChange={val => { const n = [...steps]; n[i] = { ...n[i], upper: val || undefined }; setSteps(n); }} /> },
     { title: '倍数', dataIndex: 'multiplier', width: 80, render: (v: number, _: any, i: number) => <InputNumber size="small" min={0.1} step={0.1} value={v} style={{ width: 70 }} onChange={val => { const n = [...steps]; n[i] = { ...n[i], multiplier: val || 0.1 }; setSteps(n); }} /> },
-    { title: '循环点', dataIndex: 'isCycleThreshold', width: 60, render: (v: boolean, _: any, i: number) => cycleMode === 'THRESHOLD_LOOP' ? <Checkbox checked={v} onChange={e => { const n = [...steps]; n[i] = { ...n[i], isCycleThreshold: e.target.checked }; setSteps(n); }} /> : null },
+    { title: '循环点', dataIndex: 'isCycleThreshold', width: 60, render: (v: boolean, _: any, i: number) => <Checkbox checked={v} onChange={e => { const n = [...steps]; n[i] = { ...n[i], isCycleThreshold: e.target.checked }; setSteps(n); }} /> },
     { title: '操作', key: 'act', width: 60, render: (_: any, __: any, i: number) => <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeStep(steps[i].key)} /> },
   ];
 
