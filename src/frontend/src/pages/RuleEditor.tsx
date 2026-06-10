@@ -365,20 +365,6 @@ const RuleEditor: React.FC = () => {
   const stepContent = [
     // ① 业务实体配置
     <div key="s0">
-      {selectedEntity === 'BEHAVIOR' && (
-        <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={8}>
-            <Form.Item label="频次限制" style={{ marginBottom: 0 }}>
-              <Radio.Group value={frequencyLimit} onChange={e => setFrequencyLimit(e.target.value)} size="small">
-                <Radio.Button value="once">仅首次</Radio.Button>
-                <Radio.Button value="once_per_day">每天一次</Radio.Button>
-                <Radio.Button value="unlimited">每次均可</Radio.Button>
-              </Radio.Group>
-            </Form.Item>
-          </Col>
-        </Row>
-      )}
-
       {/* 业务实体选择 — 全部展示，点击选中 */}
       <div style={{ marginBottom: 12 }}>
         <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>业务实体</Text>
@@ -481,12 +467,11 @@ const RuleEditor: React.FC = () => {
 
       <Divider style={{ margin: '12px 0' }} />
 
-      {/* 俱乐部基础积分 — 稳定，不常变 */}
+      {/* 俱乐部基础积分 — 仅 ORDER 显示 */}
+      {selectedEntity === 'ORDER' && (
       <Card size="small" title={<Space><Tag color="blue">基础积分</Tag>俱乐部基础规则</Space>}
         extra={<Text type="secondary" style={{ fontSize: 11 }}>设置后不常变更</Text>}>
-        {selectedEntity === 'ORDER' ? (
-          <>
-            {pointFormulas.map((pf, i) => (
+        {pointFormulas.map((pf, i) => (
               <Row gutter={6} key={pf.key} style={{ marginBottom: 4 }} align="middle">
                 <Col span={8}>
                   <Select size="small" value={pf.pointType} options={pointTypeOptions} style={{ width: '100%' }}
@@ -512,15 +497,11 @@ const RuleEditor: React.FC = () => {
             ))}
             <Button size="small" type="dashed" onClick={() => setPointFormulas([...pointFormulas, { key: String(Date.now()), pointType: 'REWARD', field: 'order_amount', multiplier: 1 }])}>
               + 添加积分类型</Button>
-          </>
-        ) : (
-          <Form.Item label="每次奖励积分" style={{ marginBottom: 0 }}>
-            <InputNumber size="small" min={1} max={10000} value={rewardPoints} onChange={v => setRewardPoints(v || 0)} addonAfter="分/次" />
-          </Form.Item>
-        )}
       </Card>
+      )}
 
-      {/* 等级奖励 */}
+      {/* 等级奖励 — 仅 ORDER 显示 */}
+      {selectedEntity === 'ORDER' && (
       <Card size="small" title={<Space><Tag color="green">等级奖励</Tag>会员等级额外奖励</Space>} style={{ marginTop: 12 }}>
         {tierFormulas.map((tf, i) => (
           <Row gutter={6} key={tf.key} style={{ marginBottom: 4 }} align="middle">
@@ -547,6 +528,7 @@ const RuleEditor: React.FC = () => {
         <Button size="small" type="dashed" onClick={() => setTierFormulas([...tierFormulas, { key: String(Date.now()), tier: 'SILVER', pointType: pointFormulas[0]?.pointType || 'REWARD', multiplier: 0.1 }])}>
           + 添加等级奖励</Button>
       </Card>
+      )}
 
       </div>,
 
