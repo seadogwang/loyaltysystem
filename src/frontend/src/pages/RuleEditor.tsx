@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card, Form, Input, InputNumber, Select, Button, message, Space, Modal, Tag,
   Typography, Alert, Descriptions, Divider, Steps, Collapse, Checkbox, Radio, Row, Col, DatePicker,
@@ -162,13 +162,18 @@ function generateDrl(data: Record<string, any>): string {
 const RuleEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isEdit = !!id;
   const [currentStep, setCurrentStep] = useState(0);
+
+  // 从URL参数判断类型: /rules/new?type=base → purchase, /rules/new?type=campaign → campaign
+  const ruleType = searchParams.get('type') || 'base';
+  const defaultAgenda = ruleType === 'campaign' ? 'campaign' : 'purchase';
 
   // 基本信息
   const [ruleName, setRuleName] = useState('');
   const [ruleCode, setRuleCode] = useState('');
-  const [agendaGroup, setAgendaGroup] = useState('purchase');
+  const [agendaGroup, setAgendaGroup] = useState(defaultAgenda);
   const [salience, setSalience] = useState(100);
   const [effectiveFrom, setEffectiveFrom] = useState<string>('');
   const [effectiveTo, setEffectiveTo] = useState<string>('');
