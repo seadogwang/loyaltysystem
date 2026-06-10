@@ -26,6 +26,7 @@ const PointsRedeem = lazy(() => import('../pages/PointsRedeem'));
 const TierConfig = lazy(() => import('../pages/TierConfig'));
 const RuleList = lazy(() => import('../pages/RuleList'));
 const RuleEditor = lazy(() => import('../pages/RuleEditor'));
+const PromoEditor = lazy(() => import('../pages/PromoEditor'));
 const SandboxTest = lazy(() => import('../pages/SandboxTest'));
 const FlowDesigner = lazy(() => import('../pages/FlowDesigner'));
 const ChannelList = lazy(() => import('../pages/ChannelList'));
@@ -152,6 +153,14 @@ export const router = createBrowserRouter([
       {
         path: 'rules',
         element: <SuspenseWrapper><AuthGuard><RuleList /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'rules/promo/new',
+        element: <SuspenseWrapper><AuthGuard><PromoEditor /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'rules/promo/:id/edit',
+        element: <SuspenseWrapper><AuthGuard><PromoEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/new',
