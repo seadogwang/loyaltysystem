@@ -131,9 +131,13 @@ src/main/java/com/loyalty/platform/
 
 ### Screenshots
 
-| Rule Configuration | Member Service |
-|-------------------|----------------|
-| ![Rule Editor](规则配置.png) | ![Member Service](会员服务.png) |
+| Rule Configuration | Rule Engine Update |
+|-------------------|---------------------|
+| ![Rule Config](规则配置.png) | ![Rule Engine](规则引擎更新.png) |
+
+| Member Service | Sandbox Test |
+|---------------|--------------|
+| ![Member](会员服务.png) | ![Sandbox](规则管理.-发布前的沙箱测试.png) |
 
 ---
 
