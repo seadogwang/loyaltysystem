@@ -115,8 +115,13 @@ function generateDrl(data: Record<string, any>): string {
           actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pf.pointType}", _base.multiply(new java.math.BigDecimal("${pf.multiplier}")).setScale(0, java.math.RoundingMode.DOWN), "${safeName}", null);`);
         }
       }
-      // 额外奖励上限 (campaign cap)
-      if (data.maxPoints > 0) actions.push(`    // campaign cap: ${data.maxPoints}`);
+      // 积分活动额外奖励
+      if (data.campaignReward > 0) {
+        actions.push(`    // campaign extra reward`);
+        actions.push(`    java.math.BigDecimal _campaign = new java.math.BigDecimal("${data.campaignReward}");`);
+        if (data.maxPoints > 0) actions.push(`    if (_campaign.compareTo(new java.math.BigDecimal("${data.maxPoints}")) > 0) _campaign = new java.math.BigDecimal("${data.maxPoints}");`);
+        actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${data.campaignPointType || 'REWARD'}", _campaign, "${safeName}_CAMPAIGN", null);`);
+      }
     } else {
       const perItem = data.perItemPoints || 0;
       if (perItem > 0) {
@@ -192,6 +197,8 @@ const RuleEditor: React.FC = () => {
   const [ratioPercent, setRatioPercent] = useState(1);
   const [floorPoints, setFloorPoints] = useState(0);
   const [maxPoints, setMaxPoints] = useState(0);
+  const [campaignPointType, setCampaignPointType] = useState('REWARD');
+  const [campaignReward, setCampaignReward] = useState(0);
   const [perItemPoints, setPerItemPoints] = useState(5);
   const [categoryWeights, setCategoryWeights] = useState<CategoryWeight[]>([]);
   const [quantityTiers, setQuantityTiers] = useState<QuantityTier[]>([]);
@@ -248,11 +255,11 @@ const RuleEditor: React.FC = () => {
     ruleName, agendaGroup, salience, selectedEntity, frequencyLimit,
     channels, memberTiers, minAmount, tradeStatus, extConditions,
     calcMode, pointFormulas, floorPoints, maxPoints, perItemPoints, categoryWeights, quantityTiers,
-    rewardPoints, tierFormulas, aiGeneratedDrl,
+    rewardPoints, tierFormulas, campaignPointType, campaignReward, aiGeneratedDrl,
   }), [ruleName, agendaGroup, salience, selectedEntity, frequencyLimit,
     channels, memberTiers, minAmount, tradeStatus, extConditions,
     calcMode, pointFormulas, floorPoints, maxPoints, perItemPoints, categoryWeights, quantityTiers,
-    rewardPoints, tierFormulas, aiGeneratedDrl]);
+    rewardPoints, tierFormulas, campaignPointType, campaignReward, aiGeneratedDrl]);
 
   const drlCode = useMemo(() => manualEdit ? manualDrl : generateDrl(formData), [formData, manualEdit, manualDrl]);
 
@@ -541,15 +548,6 @@ const RuleEditor: React.FC = () => {
           + 添加等级奖励</Button>
       </Card>
 
-      {/* 额外奖励 — 积分活动，常变更 */}
-      <Card size="small" title={<Space><Tag color="orange">额外奖励</Tag>积分活动</Space>}
-        extra={<Text type="secondary" style={{ fontSize: 11 }}>可随时调整</Text>} style={{ marginTop: 12 }}>
-        <Form.Item label="活动上限" tooltip="活动期间额外奖励部分的单笔积分上限" style={{ marginBottom: 8 }}>
-          <InputNumber size="small" min={0} max={999999} value={maxPoints} onChange={v => setMaxPoints(v || 0)} addonAfter="分/单" />
-        </Form.Item>
-        <Text type="secondary" style={{ fontSize: 11 }}>活动规则通过下方 AI 步骤添加</Text>
-      </Card>
-
       </div>,
 
     // ② AI 活动
@@ -589,6 +587,21 @@ const RuleEditor: React.FC = () => {
 
       <Card size="small" style={{ marginBottom: 16 }}>
         {stepContent[0]}
+      </Card>
+
+      {/* 积分活动 — 独立配置，常变更 */}
+      <Card size="small" title={<Space><Tag color="orange">积分活动</Tag>额外奖励配置</Space>}
+        extra={<Text type="secondary" style={{ fontSize: 11 }}>独立于基础规则，可随时调整</Text>} style={{ marginBottom: 16 }}>
+        <Form.Item label="活动积分类型" style={{ marginBottom: 8 }}>
+          <Select size="small" value={campaignPointType} onChange={setCampaignPointType} options={pointTypeOptions} style={{ width: 200 }} />
+        </Form.Item>
+        <Form.Item label="额外奖励" tooltip="基础积分基础上额外增加的积分" style={{ marginBottom: 8 }}>
+          <InputNumber size="small" min={1} max={999999} value={campaignReward} onChange={v => setCampaignReward(v || 0)} addonAfter="分/单" />
+        </Form.Item>
+        <Form.Item label="活动上限" tooltip="活动奖励部分的单笔积分上限" style={{ marginBottom: 8 }}>
+          <InputNumber size="small" min={0} max={999999} value={maxPoints} onChange={v => setMaxPoints(v || 0)} addonAfter="分/单" />
+        </Form.Item>
+        <Text type="secondary" style={{ fontSize: 11 }}>活动条件通过下方 AI 活动规则配置</Text>
       </Card>
 
       <Card size="small" title={<Space><ThunderboltOutlined />AI 活动规则</Space>} style={{ marginBottom: 16 }}>
