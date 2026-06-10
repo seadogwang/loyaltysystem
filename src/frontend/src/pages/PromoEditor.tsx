@@ -404,7 +404,7 @@ const PromoEditor: React.FC = () => {
               </Form.Item>
             ) : (
               <Form.Item label="奖励积分" style={{ marginBottom: 8 }}>
-                <InputNumber size="small" min={1} value={simpleFixedPoints} onChange={v => setSimpleFixedPoints(v || 0)} addonAfter={calcMode === 'HEADER' ? '分/单' : '分/件'} />
+                <InputNumber size="small" min={1} value={simpleFixedPoints} onChange={v => setSimpleFixedPoints(v || 0)} />
               </Form.Item>
             )}
           </div>
