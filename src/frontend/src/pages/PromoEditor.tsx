@@ -28,10 +28,23 @@ interface RewardStep {
   rewardType: 'multiplier' | 'fixed';
 }
 
+interface ItemRule {
+  key: string; sku: string; type: 'MULTIPLIER' | 'FIXED_POINTS'; value: number;
+}
+
 const ENTITY_OPTIONS: Option[] = [
-  { label: 'ORDER (订单)', value: 'ORDER' },
+  { label: 'Order (订单)', value: 'ORDER' },
   { label: 'BEHAVIOR (行为)', value: 'BEHAVIOR' },
   { label: 'MEMBER (会员)', value: 'MEMBER' },
+];
+
+// Order 明细属性（Order 的子对象，不作为独立实体）
+const ORDER_ITEM_FIELDS: SchemaField[] = [
+  { label: 'SKU (sku)', value: 'sku', type: 'string' },
+  { label: '类目 (category_id)', value: 'category_id', type: 'string' },
+  { label: '单价 (price)', value: 'price', type: 'number' },
+  { label: '数量 (quantity)', value: 'quantity', type: 'number' },
+  { label: '商品名 (product_name)', value: 'product_name', type: 'string' },
 ];
 
 const OPS: Option[] = [
@@ -71,9 +84,10 @@ const PromoEditor: React.FC = () => {
   const [effectiveEnd, setEffectiveEnd] = useState<string>('');
   const [isPermanent, setIsPermanent] = useState(true);
 
-  // 触发条件 — 与基础规则一致
+  // 触发条件 — 每行独立实体
   const [selectedEntity, setSelectedEntity] = useState('ORDER');
   const [schemaFields, setSchemaFields] = useState<SchemaField[]>([]);
+  const [schemasByEntity, setSchemasByEntity] = useState<Record<string, SchemaField[]>>({});
   const [extConditions, setExtConditions] = useState<ExtCondition[]>([]);
   const [editingCondIdx, setEditingCondIdx] = useState<number | null>(null);
 
@@ -81,7 +95,7 @@ const PromoEditor: React.FC = () => {
   const [rewardTab, setRewardTab] = useState<string>('simple');
 
   // 奖励规则 — 简单模式
-  const [calcMode, setCalcMode] = useState<string>('HEADER');
+  const [calcMode, setCalcMode] = useState<string>('LINE');
   const [simpleType, setSimpleType] = useState<string>('MULTIPLIER');
   const [simpleMultiplier, setSimpleMultiplier] = useState(2.0);
   const [simpleFixedPoints, setSimpleFixedPoints] = useState(100);
@@ -99,6 +113,11 @@ const PromoEditor: React.FC = () => {
   const [downgradeMultiplier, setDowngradeMultiplier] = useState(1.0);
   const [downgradeContinueCycle, setDowngradeContinueCycle] = useState(false);
 
+  // 商品级奖励设置
+  const [itemRulesEnabled, setItemRulesEnabled] = useState(false);
+  const [itemRules, setItemRules] = useState<ItemRule[]>([]);
+  const [unmatchedAction, setUnmatchedAction] = useState<string>('USE_GLOBAL');
+
   // 预览
   const [previewAmount, setPreviewAmount] = useState(1000);
   const [previewAlready, setPreviewAlready] = useState(0);
@@ -108,15 +127,30 @@ const PromoEditor: React.FC = () => {
   // 保存
   const [saving, setSaving] = useState(false);
 
-  // 加载 Schema — 根据选中实体
+  // 加载全部实体 Schema
   useEffect(() => {
-    api.get(`/schemas/${selectedEntity}`).then(({ data }) => {
-      const s = data?.data?.schema || data?.data;
-      setSchemaFields(Object.entries(s?.properties || {}).map(([k, v]: any) => ({
-        label: `${v.title || k} (${k})`, value: k, type: v.type || 'string', format: v.format, enumValues: v.enum,
-      })));
-    }).catch(() => {});
-  }, [selectedEntity]);
+    const loadSchemas = async () => {
+      const map: Record<string, SchemaField[]> = {};
+      for (const ent of ['ORDER', 'BEHAVIOR', 'MEMBER']) {
+        try {
+          const { data } = await api.get(`/schemas/${ent}`);
+          const s = data?.data?.schema || data?.data;
+          const fields: SchemaField[] = Object.entries(s?.properties || {}).map(([k, v]: any) => ({
+            label: `${v.title || k} (${k})`, value: k, type: v.type || 'string', format: v.format, enumValues: v.enum,
+          }));
+          // Order 实体合并明细属性
+          if (ent === 'ORDER') {
+            map[ent] = [...fields, ...ORDER_ITEM_FIELDS];
+          } else {
+            map[ent] = fields;
+          }
+        } catch { map[ent] = []; }
+      }
+      setSchemasByEntity(map);
+      setSchemaFields(map['ORDER'] || []);
+    };
+    loadSchemas();
+  }, []);
 
   // 编辑模式加载
   useEffect(() => {
@@ -143,18 +177,21 @@ const PromoEditor: React.FC = () => {
               type: c.type || 'string',
               format: c.format,
               op: c.operator || c.op || '==',
-              value: typeof c.value === 'string' ? c.value : JSON.stringify(c.value),
+              value: Array.isArray(c.value) ? c.value.join(',') : (typeof c.value === 'string' ? c.value : JSON.stringify(c.value)),
               valueEnd: c.valueEnd || '',
             })));
           }
           if (meta.reward) {
             const rw = meta.reward;
-            if (rw.steps) setSteps(rw.steps);
+            if (rw.steps) setSteps(rw.steps.map((s: any) => ({ ...s, key: s.key || String(Date.now()), lowerInclusive: s.lowerInclusive ?? true, upperInclusive: s.upperInclusive ?? false })));
             if (rw.cycleMode) setCycleMode(rw.cycleMode);
             if (rw.perOrderLimit) setPerOrderLimit(rw.perOrderLimit);
             if (rw.accumulativeLimit) setAccumulativeLimit(rw.accumulativeLimit);
             if (rw.excessStrategy) setExcessStrategy(rw.excessStrategy);
             if (rw.remainderMode) setRemainderMode(rw.remainderMode);
+            if (rw.item_rules_enabled !== undefined) setItemRulesEnabled(rw.item_rules_enabled);
+            if (rw.item_rules) setItemRules(rw.item_rules.map((r: any) => ({ ...r, key: r.key || String(Date.now()) })));
+            if (rw.unmatched_action) setUnmatchedAction(rw.unmatched_action);
           }
         }
       } catch (e) {}
@@ -179,7 +216,9 @@ const PromoEditor: React.FC = () => {
     extConditions,
     entity_conditions: extConditions.filter(c => c.field).map(c => ({
       entity: c.entity, attribute: c.field, operator: c.op, type: c.type,
-      value: c.op?.startsWith('BETWEEN') ? { min: Number(c.value), max: Number(c.valueEnd) } : c.value,
+      value: c.field === 'combination_sku_set'
+        ? (c.value ? c.value.split(',').filter(Boolean) : [])
+        : c.op?.startsWith('BETWEEN') ? { min: Number(c.value), max: Number(c.valueEnd) } : c.value,
     })),
     effective_time_range: { start: effectiveStart || null, end: isPermanent ? null : (effectiveEnd || null) },
     reward: rewardTab === 'simple' ? {
@@ -188,11 +227,14 @@ const PromoEditor: React.FC = () => {
       simple_type: simpleType,
       simple_multiplier: simpleType === 'MULTIPLIER' ? simpleMultiplier : undefined,
       simple_fixed_points: simpleType === 'FIXED_POINTS' ? simpleFixedPoints : undefined,
+      item_rules_enabled: itemRulesEnabled,
+      item_rules: itemRulesEnabled ? itemRules.map(r => ({ sku: r.sku, type: r.type, value: r.value })) : [],
+      unmatched_action: unmatchedAction,
       perOrderLimit, accumulativeLimit,
     } : {
       calc_mode: calcMode,
       type: 'STEP_CYCLE',
-      steps: steps.map(s => ({ lower: s.lower, upper: s.upper, multiplier: s.multiplier, isCycleThreshold: s.isCycleThreshold })),
+      steps: steps.map(s => ({ lower: s.lower, upper: s.upper, multiplier: s.multiplier, isCycleThreshold: s.isCycleThreshold, lowerInclusive: s.lowerInclusive, upperInclusive: s.upperInclusive })),
       cycleMode, cycleThresholdOrder: cycleThresholds, remainderMode, remainderFixedMultiplier: remainderFixedMult,
       perOrderLimit, accumulativeLimit, excessStrategy, downgradeMultiplier, downgradeContinueCycle,
     },
@@ -266,8 +308,13 @@ const PromoEditor: React.FC = () => {
       );
     }},
     { title: '倍数', dataIndex: 'multiplier', width: 80, render: (v: number, _: any, i: number) => <InputNumber size="small" min={0.1} step={0.1} value={v} style={{ width: 70 }} onChange={val => { const n = [...steps]; n[i] = { ...n[i], multiplier: val || 0.1 }; setSteps(n); }} /> },
-    { title: '循环点', dataIndex: 'isCycleThreshold', width: 60, render: (v: boolean, _: any, i: number) => <Checkbox checked={v} onChange={e => { const n = [...steps]; n[i] = { ...n[i], isCycleThreshold: e.target.checked }; setSteps(n); }} /> },
-    { title: '操作', key: 'act', width: 60, render: (_: any, __: any, i: number) => <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeStep(steps[i].key)} /> },
+    { title: '循环点', dataIndex: 'isCycleThreshold', width: 60, render: (v: boolean, _: any, i: number) => <Checkbox checked={v} onChange={e => { const n = [...steps]; n[i] = { ...n[i], isCycleThreshold: e.target.checked }; setSteps(n); setCycleMode(e.target.checked || n.some(s => s.isCycleThreshold) ? 'THRESHOLD_LOOP' : 'SINGLE_MATCH'); }} /> },
+    { title: '操作', key: 'act', width: 80, render: (_: any, __: any, i: number) => (
+    <Space size={8}>
+      <Button size="small" icon={<DeleteOutlined />} onClick={() => removeStep(steps[i].key)} />
+      {i === steps.length - 1 && <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addStep} />}
+    </Space>
+  ) },
   ];
 
   return (
@@ -293,200 +340,254 @@ const PromoEditor: React.FC = () => {
         </Row>
       </Card>
 
-      {/* 触发条件 — 与基础规则一致 */}
-      <div style={{ marginBottom: 12 }}>
-        <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>业务实体</Text>
-        <Space wrap>
-          {ENTITY_OPTIONS.map(e => (
-            <Button key={e.value}
-              type={selectedEntity === e.value ? 'primary' : 'default'}
-              size="small"
-              onClick={() => setSelectedEntity(e.value)}
-            >{e.label}</Button>
-          ))}
-        </Space>
-      </div>
+      {/* 积分活动配置 — 统一卡片 */}
+      <Card size="small" style={{ marginBottom: 16, border: '1px solid #d9d9d9' }}>
 
-      <Card size="small" title={<Space><Tag color="blue">{selectedEntity}</Tag>可用属性</Space>}
-        extra={<Text type="secondary" style={{ fontSize: 11 }}>点击属性添加为条件</Text>} style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {schemaFields.filter(f => f.type !== 'array').map(f => {
-            const added = extConditions.some(c => c.field === f.value && c.entity === selectedEntity);
+        {/* === 触发条件 === */}
+        <div style={{ background: '#fafafa', borderRadius: 6, padding: '10px 14px', marginBottom: 12, border: '1px solid #f0f0f0' }}>
+          <Text strong style={{ fontSize: 14, color: '#262626', marginBottom: 6, display: 'block' }}>触发条件</Text>
+          {/* 条件行列表 — 每行：实体 + 属性 + 运算符 + 值 */}
+        <div style={{ marginBottom: 8 }}>
+          {extConditions.map((c, i) => {
+            const condSchemas = schemasByEntity[c.entity] || [];
+            const isComboSku = c.field === 'combination_sku_set';
+            const skuValues = isComboSku ? (c.value ? c.value.split(',').filter(Boolean) : []) : [];
+            const fm = condSchemas.find(f => f.value === c.field) ||
+              (isComboSku ? { label: '组合商品', value: 'combination_sku_set', type: 'sku_set' } as SchemaField : undefined);
+            // Build attribute options: schema fields + combo sku
+            const attrOpts: Option[] = condSchemas.filter(f => f.type !== 'array').map(f => ({ label: f.label, value: f.value }));
+            if (c.entity === 'ORDER') {
+              attrOpts.push({ label: '组合商品 (combination_sku_set)', value: 'combination_sku_set' });
+            }
             return (
-              <Tag key={f.value}
-                style={{ cursor: 'pointer', fontSize: 12, padding: '2px 10px', border: added ? '1px solid #1677ff' : '1px dashed #d9d9d9', background: added ? '#f0f5ff' : '#fff' }}
-                color={added ? (f.type === 'number' ? 'blue' : f.type === 'string' ? 'green' : 'orange') : undefined}
-                onClick={() => {
-                  const exists = extConditions.findIndex(c => c.field === f.value && c.entity === selectedEntity);
-                  if (exists >= 0) { setEditingCondIdx(exists); }
-                  else {
-                    const newIdx = extConditions.length;
-                    setExtConditions([...extConditions, { key: String(Date.now()), entity: selectedEntity, field: f.value, type: f.type, format: f.format, op: f.type === 'number' || f.format ? '>=' : '==', value: '' }]);
-                    setEditingCondIdx(newIdx);
-                  }
-                }}
-              >{added ? '✓ ' : '+ '}{f.label}</Tag>
+              <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', flexWrap: 'wrap' }}>
+                {/* 实体 */}
+                <Select size="small" value={c.entity} style={{ width: 130 }} showSearch
+                  options={ENTITY_OPTIONS}
+                  onChange={v => {
+                    const n = [...extConditions];
+                    n[i] = { key: c.key, entity: v, field: '', type: 'string', op: '==', value: '' };
+                    setExtConditions(n);
+                  }} />
+                {/* 属性 */}
+                <Select size="small" value={c.field || undefined} style={{ width: 160 }}
+                  placeholder="选择属性" showSearch optionFilterProp="label"
+                  options={attrOpts}
+                  onChange={v => {
+                    const n = [...extConditions];
+                    const sf = condSchemas.find(f => f.value === v);
+                    const isCsku = v === 'combination_sku_set';
+                    n[i] = {
+                      ...n[i], field: v,
+                      type: isCsku ? 'sku_set' : (sf?.type || 'string'),
+                      format: isCsku ? undefined : sf?.format,
+                      op: isCsku ? 'CONTAINS_ALL' : (sf?.type === 'number' || sf?.format ? '>=' : '=='),
+                      value: '',
+                    };
+                    setExtConditions(n);
+                  }} />
+                {/* 组合商品特殊UI */}
+                {isComboSku ? (
+                  <>
+                    <Text type="secondary" style={{ fontSize: 12 }}>必须同时包含：</Text>
+                    <Select mode="tags" size="small" style={{ minWidth: 220 }} placeholder="输入 SKU 编码，回车添加"
+                      value={skuValues}
+                      onChange={vals => { const n = [...extConditions]; n[i] = { ...n[i], value: (vals as string[]).join(',') }; setExtConditions(n); }} />
+                  </>
+                ) : c.field ? (
+                  <>
+                    {/* 运算符 */}
+                    <Select size="small" value={c.op} style={{ width: c.op?.startsWith('BETWEEN') ? 110 : 70 }} showSearch
+                      options={getOpsForField(c.type, c.format)}
+                      onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], op: v, value: '', valueEnd: '' }; setExtConditions(n); }} />
+                    {/* 值 */}
+                    {c.op?.startsWith('BETWEEN') ? (
+                      <Space size={4}>
+                        <InputNumber size="small" placeholder="起始" style={{ width: 80 }} value={c.value ? Number(c.value) : undefined}
+                          onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} />
+                        <Text type="secondary">~</Text>
+                        <InputNumber size="small" placeholder="结束" style={{ width: 80 }} value={c.valueEnd ? Number(c.valueEnd) : undefined}
+                          onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], valueEnd: String(v ?? '') }; setExtConditions(n); }} />
+                      </Space>
+                    ) : c.type === 'number' ? (
+                      <InputNumber size="small" placeholder="数值" style={{ width: 100 }} value={c.value ? Number(c.value) : undefined}
+                        onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} />
+                    ) : fm?.enumValues?.length ? (
+                      <Select size="small" style={{ width: 140 }} value={c.value || undefined}
+                        options={fm.enumValues.map(e => ({ label: e, value: e }))}
+                        onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: v }; setExtConditions(n); }} />
+                    ) : c.format === 'date-time' ? (
+                      <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" style={{ width: 170 }}
+                        value={c.value ? dayjs(c.value) : null}
+                        onChange={(d: any) => { const n = [...extConditions]; n[i] = { ...n[i], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} />
+                    ) : (
+                      <Input size="small" placeholder="输入值" style={{ width: 120 }} value={c.value}
+                        onChange={e => { const n = [...extConditions]; n[i] = { ...n[i], value: e.target.value }; setExtConditions(n); }} />
+                    )}
+                  </>
+                ) : null}
+                {/* 删除 */}
+                <Button size="small" type="text" danger icon={<DeleteOutlined />}
+                  onClick={() => setExtConditions(extConditions.filter((_, j) => j !== i))} />
+              </div>
             );
           })}
         </div>
-      </Card>
+        {/* [+ 添加条件] */}
+        <Button size="small" type="dashed" icon={<PlusOutlined />} style={{ marginBottom: 8 }}
+          onClick={() => setExtConditions([...extConditions, { key: String(Date.now()), entity: 'ORDER', field: '', type: 'string', op: '==', value: '' }])}>
+          添加条件</Button>
+        </div>
 
-      {/* 条件列表 */}
-      {extConditions.filter(c => c.field).length > 0 && (
-        <Card size="small" title={<Space><Tag color="green">{extConditions.filter(c => c.field).length}</Tag>已添加的条件</Space>} style={{ marginTop: 12, marginBottom: 12 }}>
-          {extConditions.filter(c => c.field).map((c, i) => {
-            const fm = schemaFields.find(f => f.value === c.field);
-            const isEditing = editingCondIdx === i;
-            return (
-              <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: isEditing ? '6px 8px' : '4px 0', background: isEditing ? '#fffbe6' : 'transparent', borderRadius: 4, flexWrap: 'wrap' }}>
-                <Tag color={c.entity === 'ORDER' ? 'blue' : c.entity === 'MEMBER' ? 'green' : 'orange'} style={{ fontSize: 10, margin: 0 }}>{c.entity}</Tag>
-                <Tag color={c.type === 'number' ? 'blue' : c.format === 'date-time' ? 'orange' : 'green'} style={{ margin: 0, flexShrink: 0 }}>{fm?.label || c.field}</Tag>
-                {isEditing ? (<>
-                  <Select size="small" value={c.op} options={getOpsForField(c.type, c.format)} style={{ width: c.op?.startsWith('BETWEEN') ? 120 : 70 }}
-                    onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], op: v, value: '', valueEnd: '' }; setExtConditions(n); }} />
-                  {c.op?.startsWith('BETWEEN') ? (
-                    <Space size={4}>
-                      {c.format === 'date-time' ? <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="起始" style={{ width: 150 }} value={c.value ? dayjs(c.value) : null} onChange={(d: any) => { const n = [...extConditions]; n[i] = { ...n[i], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} /> : <InputNumber size="small" placeholder="起始" style={{ width: 80 }} value={c.value ? Number(c.value) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} />}
-                      <Text type="secondary">~</Text>
-                      {c.format === 'date-time' ? <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="结束" style={{ width: 150 }} value={c.valueEnd ? dayjs(c.valueEnd) : null} onChange={(d: any) => { const n = [...extConditions]; n[i] = { ...n[i], valueEnd: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} /> : <InputNumber size="small" placeholder="结束" style={{ width: 80 }} value={c.valueEnd ? Number(c.valueEnd) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], valueEnd: String(v ?? '') }; setExtConditions(n); }} />}
-                    </Space>
-                  ) : c.type === 'number' ? (
-                    <InputNumber size="small" placeholder="数值" style={{ width: 100 }} value={c.value ? Number(c.value) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} onPressEnter={() => setEditingCondIdx(null)} />
-                  ) : fm?.enumValues?.length ? (
-                    <Select size="small" style={{ width: 140 }} value={c.value || undefined} options={fm.enumValues.map(e => ({ label: e, value: e }))} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: v }; setExtConditions(n); setEditingCondIdx(null); }} />
-                  ) : c.format === 'date-time' ? (
-                    <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" style={{ width: 170 }} value={c.value ? dayjs(c.value) : null} onChange={(d: any) => { const n = [...extConditions]; n[i] = { ...n[i], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); setEditingCondIdx(null); }} />
-                  ) : (
-                    <Input size="small" placeholder="输入值" style={{ width: 120 }} value={c.value} onChange={e => { const n = [...extConditions]; n[i] = { ...n[i], value: e.target.value }; setExtConditions(n); }} onPressEnter={() => setEditingCondIdx(null)} />
-                  )}
-                  <Button size="small" type="link" onClick={() => setEditingCondIdx(null)}>确定</Button>
-                  <Button size="small" type="link" danger onClick={() => { setExtConditions(extConditions.filter((_, j) => j !== i)); setEditingCondIdx(null); }}>×</Button>
-                </>) : (<>
-                  <Text style={{ fontSize: 12 }}>{c.op?.startsWith('BETWEEN') ? `${c.op === 'BETWEEN_EQ' ? '区间[含]' : '区间'} ${c.value || '?'} ~ ${c.valueEnd || '?'}` : `${c.op} ${c.value || '(未设置)'}`}</Text>
-                  <Button size="small" type="link" style={{ padding: 0 }} icon={<EditOutlined style={{ fontSize: 13, color: '#595959' }} />} onClick={() => setEditingCondIdx(i)} />
-                  <Button size="small" type="link" danger style={{ padding: 0 }} icon={<DeleteOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />} onClick={() => setExtConditions(extConditions.filter((_, j) => j !== i))} />
-                </>)}
-              </div>
-            );
-          })}
-        </Card>
-      )}
+        {/* === 奖励配置 === */}
+        <div style={{ background: '#fafafa', borderRadius: 6, padding: '10px 14px', marginBottom: 12, border: '1px solid #f0f0f0' }}>
+          <Tabs size="small" activeKey={rewardTab} onChange={k => setRewardTab(k)}
+            items={[
+              { key: 'simple', label: '奖励配置', children: (
+            <div>
 
-      {/* 奖励配置 Tab */}
-      <Card size="small" style={{ marginBottom: 16 }}
-        tabList={[
-          { key: 'simple', tab: '奖励配置' },
-          { key: 'step', tab: '阶梯奖励配置' },
-        ]}
-        activeTabKey={rewardTab}
-        onTabChange={k => setRewardTab(k)}>
-        {rewardTab === 'simple' ? (
-          <div>
-            <Form.Item label="计算范围" style={{ marginBottom: 8 }}>
-              <Radio.Group value={calcMode} onChange={e => setCalcMode(e.target.value)} size="small">
-                <Radio.Button value="HEADER">订单头计算</Radio.Button>
-                <Radio.Button value="LINE">订单明细计算</Radio.Button>
-              </Radio.Group>
-              <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
-                {calcMode === 'HEADER' ? '(基于整笔订单总金额)' : '(基于每个商品行，退单时按行处理)'}
-              </Text>
-            </Form.Item>
-            <Divider style={{ margin: '8px 0' }} />
-            <Form.Item label="奖励方式" style={{ marginBottom: 8 }}>
-              <Radio.Group value={simpleType} onChange={e => setSimpleType(e.target.value)} size="small">
-                <Radio.Button value="MULTIPLIER">按比例倍数</Radio.Button>
-                <Radio.Button value="FIXED_POINTS">固定积分值</Radio.Button>
-              </Radio.Group>
-            </Form.Item>
-            {simpleType === 'MULTIPLIER' ? (
-              <Form.Item label="奖励倍数" style={{ marginBottom: 8 }}>
-                <InputNumber size="small" min={0.1} step={0.1} value={simpleMultiplier} onChange={v => setSimpleMultiplier(v || 0.1)} addonAfter="倍" />
-              </Form.Item>
-            ) : (
-              <Form.Item label="奖励积分" style={{ marginBottom: 8 }}>
-                <InputNumber size="small" min={1} value={simpleFixedPoints} onChange={v => setSimpleFixedPoints(v || 0)} />
-              </Form.Item>
-            )}
-          </div>
-        ) : (
-          <div>
-            <Form.Item label="计算范围" style={{ marginBottom: 8 }}>
-              <Radio.Group value={calcMode} onChange={e => setCalcMode(e.target.value)} size="small" disabled>
-                <Radio.Button value="HEADER">订单头计算</Radio.Button>
-              </Radio.Group>
-              <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>(阶梯模式暂只支持订单头计算)</Text>
-            </Form.Item>
-            <Divider style={{ margin: '8px 0' }} />
-            <Table dataSource={steps} columns={stepColumns} rowKey="key" size="small" pagination={false}
-              title={() => <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={addStep}>添加区间</Button>} />
-            <Collapse ghost style={{ marginTop: 8 }} items={[{
-              key: 'cycle', label: <Space><Checkbox checked={cycleMode === 'THRESHOLD_LOOP'} onChange={e => setCycleMode(e.target.checked ? 'THRESHOLD_LOOP' : 'SINGLE_MATCH')}>启用循环扣除</Checkbox></Space>,
-              children: (<div>
-                <Form.Item label="循环分段点（从高到低）" style={{ marginBottom: 8 }}>
-                  {cycleThresholds.map((t, i) => <Tag key={i} color="blue" style={{ marginRight: 4 }}>{t}</Tag>)}
-                  {cycleThresholds.length === 0 && <Text type="secondary">请在阶梯表格中勾选"循环点"</Text>}
-                </Form.Item>
-                <Form.Item label="剩余金额处理" style={{ marginBottom: 0 }}>
-                  <Radio.Group value={remainderMode} onChange={e => setRemainderMode(e.target.value)}>
-                    <Radio value="USE_STEP_MULTIPLIER">按阶梯倍数</Radio>
-                    <Radio value="FIXED_MULTIPLIER">固定倍数</Radio>
+              {/* 全局奖励 */}
+              <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 6, padding: '8px 12px', marginBottom: 12 }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>全局奖励（适用于所有商品）</Text>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <Text style={{ fontSize: 14, flexShrink: 0 }}>奖励方式</Text>
+                  <Radio.Group value={simpleType} onChange={e => setSimpleType(e.target.value)} size="small"
+                    optionType="button" buttonStyle="solid">
+                    <Radio.Button value="MULTIPLIER" style={{ fontSize: 12 }}>按比例倍数</Radio.Button>
+                    <Radio.Button value="FIXED_POINTS" style={{ fontSize: 12 }}>固定积分值</Radio.Button>
                   </Radio.Group>
-                  {remainderMode === 'FIXED_MULTIPLIER' && <InputNumber size="small" min={0.1} step={0.1} value={remainderFixedMult} onChange={v => setRemainderFixedMult(v || 0.1)} style={{ marginLeft: 8 }} />}
-                </Form.Item>
-              </div>),
-            }]} />
-          </div>
-        )}
-      </Card>
-
-      {/* 上限控制 — 两种模式共享 */}
-      <Card size="small" title="上限控制" style={{ marginBottom: 16 }}>
-        <Row gutter={16}>
-          <Col span={8}><Form.Item label="单笔上限" style={{ marginBottom: 0 }}><InputNumber size="small" min={0} value={perOrderLimit} onChange={v => setPerOrderLimit(v || undefined)} addonAfter="分" style={{ width: '100%' }} placeholder="不限" /></Form.Item></Col>
-          <Col span={8}><Form.Item label="累计上限" style={{ marginBottom: 0 }}><InputNumber size="small" min={0} value={accumulativeLimit} onChange={v => setAccumulativeLimit(v || undefined)} addonAfter="分" style={{ width: '100%' }} placeholder="不限" /></Form.Item></Col>
-        </Row>
-        {rewardTab === 'step' && (accumulativeLimit || 0) > 0 && (
-          <>
-            <Divider style={{ margin: '8px 0' }} />
-            <Form.Item label="超限策略" style={{ marginBottom: 0 }}>
-              <Select size="small" value={excessStrategy} options={EXCESS_STRATEGIES} style={{ width: 200 }} onChange={v => setExcessStrategy(v)} />
-            </Form.Item>
-            {excessStrategy === 'TRUNCATE_AND_DOWNGRADE' && (
-              <div style={{ marginTop: 8 }}>
-                <Form.Item label="降级倍数" style={{ marginBottom: 4 }}><InputNumber size="small" min={0} step={0.1} value={downgradeMultiplier} onChange={v => setDowngradeMultiplier(v || 0)} /></Form.Item>
-                <Checkbox checked={downgradeContinueCycle} onChange={e => setDowngradeContinueCycle(e.target.checked)}>降级后继续循环</Checkbox>
+                  <Text style={{ fontSize: 14, flexShrink: 0, marginLeft: 8 }}>{simpleType === 'MULTIPLIER' ? '全局倍数' : '全局积分'}</Text>
+                  {simpleType === 'MULTIPLIER' ? (
+                    <InputNumber size="small" min={0.1} step={0.1} value={simpleMultiplier} onChange={v => setSimpleMultiplier(v || 0.1)} addonAfter="倍" style={{ width: 80 }} />
+                  ) : (
+                    <InputNumber size="small" min={1} value={simpleFixedPoints} onChange={v => setSimpleFixedPoints(v || 0)} style={{ width: 80 }} />
+                  )}
+                </div>
               </div>
-            )}
-          </>
-        )}
-      </Card>
 
-      {/* 预览 */}
-      <Card size="small" title={<Space><PlayCircleOutlined />测试与预览</Space>} style={{ marginBottom: 16 }}>
-        <Row gutter={16} align="middle">
-          <Col>订单金额: <InputNumber size="small" min={0} value={previewAmount} onChange={v => setPreviewAmount(v || 0)} style={{ width: 100 }} addonAfter="元" /></Col>
-          <Col>已累计: <InputNumber size="small" min={0} value={previewAlready} onChange={v => setPreviewAlready(v || 0)} style={{ width: 100 }} addonAfter="分" /></Col>
-          <Col><Button icon={<PlayCircleOutlined />} onClick={handlePreview} loading={previewLoading}>运行预览</Button></Col>
-        </Row>
-        {previewResult && (
-          <Card size="small" style={{ marginTop: 12, background: '#f6ffed' }}>
-            <Row gutter={24}>
-              <Col span={6}><Text strong>理论积分</Text><br /><Text style={{ fontSize: 18, color: '#1677ff' }}>{previewResult.theoreticalTotal}</Text></Col>
-              <Col span={6}><Text strong>最终积分</Text><br /><Text style={{ fontSize: 18, color: '#52c41a' }}>{previewResult.finalPoints}</Text></Col>
-              <Col span={6}><Text strong>剩余容量</Text><br /><Text>{previewResult.remainingCap != null ? previewResult.remainingCap : '不限'}</Text></Col>
-              <Col span={6}><Text strong>新累计</Text><br /><Text>{previewResult.newTotal}</Text></Col>
-            </Row>
-            {previewResult.segments?.length > 0 && (
-              <>
-                <Divider style={{ margin: '8px 0' }} />
-                <Text type="secondary" style={{ fontSize: 11 }}>计算明细：</Text>
-                {previewResult.segments.map((seg: any, i: number) => (
-                  <Tag key={i} style={{ margin: 2, fontSize: 11 }}>{seg.amount} × {seg.multiplier} = {seg.points}</Tag>
-                ))}
-              </>
-            )}
-          </Card>
-        )}
+              {/* 商品级奖励 — 单独维度：为指定商品设置不同的倍率 */}
+              <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 6, padding: '8px 12px' }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>商品级奖励（为指定商品单独设置）</Text>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: itemRulesEnabled ? 8 : 0 }}>
+                  <Text style={{ fontSize: 14 }}>启用商品级奖励</Text>
+                  <Checkbox checked={itemRulesEnabled} onChange={e => setItemRulesEnabled(e.target.checked)} />
+                </div>
+                {itemRulesEnabled && (
+                  <div>
+                    <Table size="small" pagination={false} rowKey="key"
+                      dataSource={itemRules}
+                      columns={[
+                        { title: '商品/SKU', dataIndex: 'sku', width: 140,
+                          render: (v: string, _: any, i: number) => (
+                            <Input size="small" placeholder="SKU 编码" value={v}
+                              onChange={e => { const n = [...itemRules]; n[i] = { ...n[i], sku: e.target.value }; setItemRules(n); }} />
+                          )},
+                        { title: '奖励类型', dataIndex: 'type', width: 90,
+                          render: (v: string, _: any, i: number) => (
+                            <Select size="small" value={v} style={{ width: 80 }}
+                              options={[{ label: '倍数', value: 'MULTIPLIER' }, { label: '固定值', value: 'FIXED_POINTS' }]}
+                              onChange={val => { const n = [...itemRules]; n[i] = { ...n[i], type: val as 'MULTIPLIER' | 'FIXED_POINTS' }; setItemRules(n); }} />
+                          )},
+                        { title: '倍数/固定值', dataIndex: 'value', width: 100,
+                          render: (v: number, _: any, i: number) => (
+                            <InputNumber size="small" min={0.1} step={0.1} value={v}
+                              onChange={val => { const n = [...itemRules]; n[i] = { ...n[i], value: val || 0.1 }; setItemRules(n); }} />
+                          )},
+                        { title: '操作', key: 'act', width: 60,
+                          render: (_: any, __: any, i: number) => (
+                            <Button size="small" danger icon={<DeleteOutlined />}
+                              onClick={() => setItemRules(itemRules.filter((_, j) => j !== i))} />
+                          )},
+                      ]}
+                      title={() => (
+                        <Button size="small" type="dashed" icon={<PlusOutlined />}
+                          onClick={() => setItemRules([...itemRules, { key: String(Date.now()), sku: '', type: 'MULTIPLIER', value: 1.0 }])}>
+                          添加商品</Button>
+                      )} />
+                    <Form.Item label="未匹配的商品" style={{ marginTop: 8, marginBottom: 0 }}>
+                      <Radio.Group value={unmatchedAction} onChange={e => setUnmatchedAction(e.target.value)} size="small">
+                        <Radio value="USE_GLOBAL">使用全局倍数</Radio>
+                        <Radio value="NO_REWARD">不奖励</Radio>
+                      </Radio.Group>
+                    </Form.Item>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) },
+          { key: 'step', label: '阶梯奖励配置', children: (
+            <div>
+              <Divider style={{ margin: '8px 0' }} />
+              <Table dataSource={steps} columns={stepColumns} rowKey="key" size="small" pagination={false} />
+              {cycleThresholds.length > 0 && (
+                <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 6, padding: '8px 12px', marginTop: 8 }}>
+                  <Form.Item label="循环分段点（从高到低）" style={{ marginBottom: 8 }}>
+                    {cycleThresholds.map((t, i) => <Tag key={i} color="blue" style={{ marginRight: 4 }}>{t}</Tag>)}
+                  </Form.Item>
+                  <Form.Item label="剩余金额处理" style={{ marginBottom: 0 }}>
+                    <Radio.Group value={remainderMode} onChange={e => setRemainderMode(e.target.value)} size="small">
+                      <Radio value="USE_STEP_MULTIPLIER">按阶梯倍数</Radio>
+                      <Radio value="FIXED_MULTIPLIER">固定倍数</Radio>
+                    </Radio.Group>
+                    {remainderMode === 'FIXED_MULTIPLIER' && <InputNumber size="small" min={0.1} step={0.1} value={remainderFixedMult} onChange={v => setRemainderFixedMult(v || 0.1)} style={{ marginLeft: 8 }} />}
+                  </Form.Item>
+                </div>
+              )}
+            </div>
+          ) },
+        ]} />
+        </div>
+
+        {/* === 上限控制 === */}
+        <div style={{ background: '#fafafa', borderRadius: 6, padding: '10px 14px', marginBottom: 12, border: '1px solid #f0f0f0' }}>
+          <Text strong style={{ fontSize: 14, color: '#262626', marginBottom: 6, display: 'block' }}>上限控制</Text>
+          <Row gutter={16} style={{ marginBottom: 8 }}>
+            <Col span={8}><Form.Item label="单笔上限" style={{ marginBottom: 0 }}><InputNumber size="small" min={0} value={perOrderLimit} onChange={v => setPerOrderLimit(v || undefined)} addonAfter="分" style={{ width: '100%' }} placeholder="不限" /></Form.Item></Col>
+            <Col span={8}><Form.Item label="累计上限" style={{ marginBottom: 0 }}><InputNumber size="small" min={0} value={accumulativeLimit} onChange={v => setAccumulativeLimit(v || undefined)} addonAfter="分" style={{ width: '100%' }} placeholder="不限" /></Form.Item></Col>
+          </Row>
+          {(accumulativeLimit || 0) > 0 && (
+            <>
+              <Form.Item label="超限策略" style={{ marginBottom: 0 }}>
+                <Select size="small" value={excessStrategy} options={EXCESS_STRATEGIES} style={{ width: 200 }} onChange={v => setExcessStrategy(v)} />
+              </Form.Item>
+              {excessStrategy === 'TRUNCATE_AND_DOWNGRADE' && (
+                <div style={{ marginTop: 8 }}>
+                  <Form.Item label="降级倍数" style={{ marginBottom: 4 }}><InputNumber size="small" min={0} step={0.1} value={downgradeMultiplier} onChange={v => setDowngradeMultiplier(v || 0)} /></Form.Item>
+                  <Checkbox checked={downgradeContinueCycle} onChange={e => setDowngradeContinueCycle(e.target.checked)}>降级后继续循环</Checkbox>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* === 测试与预览 === */}
+        <div style={{ background: '#fafafa', borderRadius: 6, padding: '10px 14px', border: '1px solid #f0f0f0' }}>
+          <Text strong style={{ fontSize: 14, color: '#262626', marginBottom: 6, display: 'block' }}>测试与预览</Text>
+          <Row gutter={16} align="middle" style={{ marginBottom: 8 }}>
+            <Col>订单金额: <InputNumber size="small" min={0} value={previewAmount} onChange={v => setPreviewAmount(v || 0)} style={{ width: 100 }} addonAfter="元" /></Col>
+            <Col>已累计: <InputNumber size="small" min={0} value={previewAlready} onChange={v => setPreviewAlready(v || 0)} style={{ width: 100 }} addonAfter="分" /></Col>
+            <Col><Button icon={<PlayCircleOutlined />} onClick={handlePreview} loading={previewLoading}>运行预览</Button></Col>
+          </Row>
+          {previewResult && (
+            <Card size="small" style={{ background: '#f6ffed' }}>
+              <Row gutter={24}>
+                <Col span={6}><Text strong>理论积分</Text><br /><Text style={{ fontSize: 18, color: '#1677ff' }}>{previewResult.theoreticalTotal}</Text></Col>
+                <Col span={6}><Text strong>最终积分</Text><br /><Text style={{ fontSize: 18, color: '#52c41a' }}>{previewResult.finalPoints}</Text></Col>
+                <Col span={6}><Text strong>剩余容量</Text><br /><Text>{previewResult.remainingCap != null ? previewResult.remainingCap : '不限'}</Text></Col>
+                <Col span={6}><Text strong>新累计</Text><br /><Text>{previewResult.newTotal}</Text></Col>
+              </Row>
+              {previewResult.segments?.length > 0 && (
+                <>
+                  <Divider style={{ margin: '8px 0' }} />
+                  <Text type="secondary" style={{ fontSize: 11 }}>计算明细：</Text>
+                  {previewResult.segments.map((seg: any, i: number) => (
+                    <Tag key={i} style={{ margin: 2, fontSize: 11 }}>{seg.amount} × {seg.multiplier} = {seg.points}</Tag>
+                  ))}
+                </>
+              )}
+            </Card>
+          )}
+        </div>
       </Card>
     </PageWrapper>
   );

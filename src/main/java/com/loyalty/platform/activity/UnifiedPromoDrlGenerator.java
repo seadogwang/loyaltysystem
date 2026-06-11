@@ -68,71 +68,194 @@ public class UnifiedPromoDrlGenerator {
                 List<String> tiers = (List<String>) value;
                 String joined = tiers.stream().map(t -> "$member.getTierCode().equals(\"" + t + "\")").collect(Collectors.joining(" || "));
                 drl.append("    eval(").append(joined).append(")\n");
+            } else if ("Order".equals(entity) && "combination_sku_set".equals(attr) && "CONTAINS_ALL".equals(operator) && value instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<String> skus = (List<String>) value;
+                String skuList = skus.stream().map(s -> "\"" + s + "\"").collect(Collectors.joining(","));
+                drl.append("    eval($event.containsAllSkus(new java.util.HashSet<>(java.util.Arrays.asList(").append(skuList).append("))))\n");
             }
         }
 
-        drl.append("    $orderAmount: java.math.BigDecimal($event.getPayloadNumber(\"total_amount\"))\n");
-        drl.append("then\n");
-
-        // Reward steps
+        // Reward calculation
         @SuppressWarnings("unchecked")
         Map<String, Object> reward = (Map<String, Object>) meta.getOrDefault("reward", Map.of());
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> steps = (List<Map<String, Object>>) reward.getOrDefault("steps", List.of());
+        String rewardType = (String) reward.getOrDefault("type", "STEP_CYCLE");
+        String calcMode = (String) reward.getOrDefault("calc_mode", "HEADER");
 
-        if (steps.isEmpty()) {
-            drl.append("    // No steps configured — default: 1x multiplier\n");
-            drl.append("    java.math.BigDecimal _pts = $orderAmount;\n");
+        // Accumulative limit parameters (extracted once, used in awardPoints call)
+        Object accLimitObj = reward.get("accumulativeLimit");
+        BigDecimal accLimit = toBigDecimal(accLimitObj);
+        String excessStrategy = (String) reward.getOrDefault("excessStrategy", "STOP");
+        Object dwMultObj = reward.getOrDefault("downgradeMultiplier", 1.0);
+        BigDecimal dwMult = toBigDecimal(dwMultObj);
+        if (dwMult == null) dwMult = BigDecimal.ONE;
+        Object dwContinueObj = reward.getOrDefault("downgradeContinueCycle", false);
+        boolean dwContinue = Boolean.TRUE.equals(dwContinueObj);
+
+        if ("SIMPLE".equals(rewardType)) {
+            // ===== Simple mode =====
+            String simpleType = (String) reward.getOrDefault("simple_type", "MULTIPLIER");
+            Object multObj = reward.getOrDefault("simple_multiplier", 1.0);
+            BigDecimal multVal = toBigDecimal(multObj);
+            if (multVal == null) multVal = BigDecimal.ONE;
+            Object fixedObj = reward.getOrDefault("simple_fixed_points", 0);
+            BigDecimal fixedVal = toBigDecimal(fixedObj);
+            if (fixedVal == null) fixedVal = BigDecimal.ZERO;
+
+            if ("LINE".equals(calcMode)) {
+                // LINE mode — iterate payload line_items
+                drl.append("    $lineItems: java.util.List() from $event.payload.get(\"line_items\")\n");
+                drl.append("then\n");
+                if ("FIXED_POINTS".equals(simpleType)) {
+                    drl.append("    java.math.BigDecimal _pts = $lineItems != null ? new java.math.BigDecimal($lineItems.size() * ").append(fixedVal).append(") : java.math.BigDecimal.ZERO;\n");
+                } else {
+                    drl.append("    java.math.BigDecimal _pts = java.math.BigDecimal.ZERO;\n");
+                    drl.append("    if ($lineItems != null) {\n");
+                    drl.append("        for (Object _li : $lineItems) {\n");
+                    drl.append("            java.util.Map _item = (java.util.Map) _li;\n");
+                    drl.append("            java.math.BigDecimal _lineAmt = new java.math.BigDecimal(String.valueOf(_item.get(\"amount\")));\n");
+                    drl.append("            _pts = _pts.add(_lineAmt.multiply(new java.math.BigDecimal(\"").append(multVal).append("\")));\n");
+                    drl.append("        }\n");
+                    drl.append("    }\n");
+                }
+            } else {
+                // HEADER mode
+                drl.append("    $orderAmount: java.math.BigDecimal($event.getPayloadNumber(\"total_amount\"))\n");
+                drl.append("then\n");
+                if ("FIXED_POINTS".equals(simpleType)) {
+                    drl.append("    java.math.BigDecimal _pts = new java.math.BigDecimal(").append(fixedVal).append(");\n");
+                } else {
+                    drl.append("    java.math.BigDecimal _pts = $orderAmount.multiply(new java.math.BigDecimal(\"").append(multVal).append("\"));\n");
+                }
+            }
         } else {
-            drl.append("    java.math.BigDecimal _pts = java.math.BigDecimal.ZERO;\n");
-            drl.append("    java.math.BigDecimal _remaining = $orderAmount;\n");
-
-            String cycleMode = (String) reward.getOrDefault("cycleMode", "SINGLE_MATCH");
+            // ===== Step/Cycle mode =====
             @SuppressWarnings("unchecked")
-            List<Number> cycleThresholds = (List<Number>) reward.getOrDefault("cycleThresholdOrder", List.of());
+            List<Map<String, Object>> steps = (List<Map<String, Object>>) reward.getOrDefault("steps", List.of());
 
-            if ("THRESHOLD_LOOP".equals(cycleMode) && !cycleThresholds.isEmpty()) {
-                BigDecimal highest = new BigDecimal(cycleThresholds.get(0).toString());
-                drl.append("    while (_remaining.compareTo(new java.math.BigDecimal(\"").append(highest).append("\")) >= 0) {\n");
-                // Find multiplier for highest threshold
-                for (Map<String, Object> step : steps) {
-                    if (Boolean.TRUE.equals(step.get("isCycleThreshold"))) {
-                        drl.append("        _pts = _pts.add(new java.math.BigDecimal(\"").append(highest).append("\").multiply(new java.math.BigDecimal(\"").append(step.get("multiplier")).append("\")));\n");
-                        break;
+            if ("LINE".equals(calcMode)) {
+                // LINE mode for step rewards — iterate line_items, match each line to step
+                drl.append("    $lineItems: java.util.List() from $event.payload.get(\"line_items\")\n");
+                drl.append("then\n");
+                drl.append("    java.math.BigDecimal _pts = java.math.BigDecimal.ZERO;\n");
+                drl.append("    if ($lineItems != null) {\n");
+                drl.append("        for (Object _li : $lineItems) {\n");
+                drl.append("            java.util.Map _item = (java.util.Map) _li;\n");
+                drl.append("            java.math.BigDecimal _lineAmt = new java.math.BigDecimal(String.valueOf(_item.get(\"amount\")));\n");
+                drl.append("            java.math.BigDecimal _remaining = _lineAmt;\n");
+
+                String cycleMode = (String) reward.getOrDefault("cycleMode", "SINGLE_MATCH");
+                @SuppressWarnings("unchecked")
+                List<Number> cycleThresholds = (List<Number>) reward.getOrDefault("cycleThresholdOrder", List.of());
+
+                if ("THRESHOLD_LOOP".equals(cycleMode) && !cycleThresholds.isEmpty()) {
+                    BigDecimal highest = new BigDecimal(cycleThresholds.get(0).toString());
+                    drl.append("            while (_remaining.compareTo(new java.math.BigDecimal(\"").append(highest).append("\")) >= 0) {\n");
+                    for (Map<String, Object> step : steps) {
+                        if (Boolean.TRUE.equals(step.get("isCycleThreshold"))) {
+                            drl.append("                _pts = _pts.add(new java.math.BigDecimal(\"").append(highest).append("\").multiply(new java.math.BigDecimal(\"").append(step.get("multiplier")).append("\")));\n");
+                            break;
+                        }
+                    }
+                    drl.append("                _remaining = _remaining.subtract(new java.math.BigDecimal(\"").append(highest).append("\"));\n");
+                    drl.append("            }\n");
+                }
+
+                if (steps.isEmpty()) {
+                    drl.append("                _pts = _pts.add(_remaining);\n");
+                } else {
+                    for (Map<String, Object> step : steps) {
+                        Object lower = step.get("lower");
+                        Object upper = step.get("upper");
+                        Object mult = step.get("multiplier");
+                        boolean lowerInc = !Boolean.FALSE.equals(step.get("lowerInclusive"));
+                        boolean upperInc = Boolean.TRUE.equals(step.get("upperInclusive"));
+                        String lowerOp = lowerInc ? ">= 0" : "> 0";
+                        String cond = "_remaining.compareTo(new java.math.BigDecimal(\"" + lower + "\")) " + lowerOp;
+                        if (upper != null && !String.valueOf(upper).isBlank()) {
+                            cond += " && _remaining.compareTo(new java.math.BigDecimal(\"" + upper + "\")) " + (upperInc ? "<= 0" : "< 0");
+                        }
+                        drl.append("            if (").append(cond).append(") {\n");
+                        drl.append("                _pts = _pts.add(_remaining.multiply(new java.math.BigDecimal(\"").append(mult).append("\")));\n");
+                        drl.append("            }\n");
                     }
                 }
-                drl.append("        _remaining = _remaining.subtract(new java.math.BigDecimal(\"").append(highest).append("\"));\n");
+                drl.append("        }\n");
                 drl.append("    }\n");
-            }
+            } else {
+                // HEADER mode for step rewards
+                drl.append("    $orderAmount: java.math.BigDecimal($event.getPayloadNumber(\"total_amount\"))\n");
+                drl.append("then\n");
+                drl.append("    java.math.BigDecimal _pts = java.math.BigDecimal.ZERO;\n");
+                drl.append("    java.math.BigDecimal _remaining = $orderAmount;\n");
 
-            // Remaining amount — find matching step
-            for (Map<String, Object> step : steps) {
-                Object lower = step.get("lower");
-                Object upper = step.get("upper");
-                Object mult = step.get("multiplier");
-                String cond = "_remaining.compareTo(new java.math.BigDecimal(\"" + lower + "\")) >= 0";
-                if (upper != null && !String.valueOf(upper).isBlank()) {
-                    cond += " && _remaining.compareTo(new java.math.BigDecimal(\"" + upper + "\")) < 0";
+                String cycleMode = (String) reward.getOrDefault("cycleMode", "SINGLE_MATCH");
+                @SuppressWarnings("unchecked")
+                List<Number> cycleThresholds = (List<Number>) reward.getOrDefault("cycleThresholdOrder", List.of());
+
+                if ("THRESHOLD_LOOP".equals(cycleMode) && !cycleThresholds.isEmpty()) {
+                    BigDecimal highest = new BigDecimal(cycleThresholds.get(0).toString());
+                    drl.append("    while (_remaining.compareTo(new java.math.BigDecimal(\"").append(highest).append("\")) >= 0) {\n");
+                    for (Map<String, Object> step : steps) {
+                        if (Boolean.TRUE.equals(step.get("isCycleThreshold"))) {
+                            drl.append("        _pts = _pts.add(new java.math.BigDecimal(\"").append(highest).append("\").multiply(new java.math.BigDecimal(\"").append(step.get("multiplier")).append("\")));\n");
+                            break;
+                        }
+                    }
+                    drl.append("        _remaining = _remaining.subtract(new java.math.BigDecimal(\"").append(highest).append("\"));\n");
+                    drl.append("    }\n");
                 }
-                drl.append("    if (").append(cond).append(") {\n");
-                drl.append("        _pts = _pts.add(_remaining.multiply(new java.math.BigDecimal(\"").append(mult).append("\")));\n");
-                drl.append("    }\n");
+
+                if (steps.isEmpty()) {
+                    drl.append("    _pts = $orderAmount;\n");
+                } else {
+                    for (Map<String, Object> step : steps) {
+                        Object lower = step.get("lower");
+                        Object upper = step.get("upper");
+                        Object mult = step.get("multiplier");
+                        boolean lowerInc = !Boolean.FALSE.equals(step.get("lowerInclusive"));
+                        boolean upperInc = Boolean.TRUE.equals(step.get("upperInclusive"));
+                        String lowerOp = lowerInc ? ">= 0" : "> 0";
+                        String cond = "_remaining.compareTo(new java.math.BigDecimal(\"" + lower + "\")) " + lowerOp;
+                        if (upper != null && !String.valueOf(upper).isBlank()) {
+                            cond += " && _remaining.compareTo(new java.math.BigDecimal(\"" + upper + "\")) " + (upperInc ? "<= 0" : "< 0");
+                        }
+                        drl.append("    if (").append(cond).append(") {\n");
+                        drl.append("        _pts = _pts.add(_remaining.multiply(new java.math.BigDecimal(\"").append(mult).append("\")));\n");
+                        drl.append("    }\n");
+                    }
+                }
             }
         }
 
-        // Per-order limit
+        // Per-order limit (shared across all modes)
         Object perOrderLimit = reward.get("perOrderLimit");
-        if (perOrderLimit instanceof Number) {
-            drl.append("    if (_pts.compareTo(new java.math.BigDecimal(\"").append(perOrderLimit).append("\")) > 0) {\n");
-            drl.append("        _pts = new java.math.BigDecimal(\"").append(perOrderLimit).append("\");\n");
+        if (perOrderLimit != null) {
+            BigDecimal pol = toBigDecimal(perOrderLimit);
+            drl.append("    if (_pts.compareTo(new java.math.BigDecimal(\"").append(pol).append("\")) > 0) {\n");
+            drl.append("        _pts = new java.math.BigDecimal(\"").append(pol).append("\");\n");
             drl.append("    }\n");
         }
 
+        // Award with accumulative limit parameters
         drl.append("    if (_pts.compareTo(java.math.BigDecimal.ZERO) > 0) {\n");
-        drl.append("        collector.awardPoints($event.getProgramCode(), $event.getMemberId(), \"REWARD\", _pts, \"").append(ruleCode).append("\", null);\n");
+        if (accLimit != null) {
+            drl.append("        collector.awardPoints($event.getProgramCode(), $event.getMemberId(), \"REWARD\", _pts, \"").append(ruleCode).append("\", null, new java.math.BigDecimal(\"").append(accLimit).append("\"), \"").append(excessStrategy).append("\", new java.math.BigDecimal(\"").append(dwMult).append("\"), ").append(dwContinue).append(");\n");
+        } else {
+            drl.append("        collector.awardPoints($event.getProgramCode(), $event.getMemberId(), \"REWARD\", _pts, \"").append(ruleCode).append("\", null);\n");
+        }
         drl.append("    }\n");
 
         drl.append("end\n");
         return drl.toString();
+    }
+
+    private static BigDecimal toBigDecimal(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof BigDecimal bd) return bd;
+        if (obj instanceof Number n) return new BigDecimal(n.toString());
+        String s = obj.toString();
+        if (s.isBlank()) return null;
+        return new BigDecimal(s);
     }
 }

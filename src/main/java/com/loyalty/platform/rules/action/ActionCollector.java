@@ -41,6 +41,15 @@ public class ActionCollector {
         add(new AwardPointsAction(programCode, memberId, accountType, points, ruleId, snapshotId));
     }
 
+    /** 便捷方法：发分（含累加上限控制参数） */
+    public void awardPoints(String programCode, String memberId, String accountType,
+                             java.math.BigDecimal points, String ruleId, String snapshotId,
+                             java.math.BigDecimal accumulativeLimit, String excessStrategy,
+                             java.math.BigDecimal downgradeMultiplier, boolean downgradeContinueCycle) {
+        add(new AwardPointsAction(programCode, memberId, accountType, points, ruleId, snapshotId,
+                accumulativeLimit, excessStrategy, downgradeMultiplier, downgradeContinueCycle));
+    }
+
     /** 便捷方法：升级 */
     public void upgradeTier(String memberId, String newTier, String reason,
                              String ruleId, String snapshotId) {

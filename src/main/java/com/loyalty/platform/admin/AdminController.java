@@ -933,47 +933,126 @@ public class AdminController {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> reward = (Map<String, Object>) body.getOrDefault("reward", Map.of());
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> stepsRaw = (List<Map<String, Object>>) reward.getOrDefault("steps", List.of());
-
-        List<StepCycleCalculator.Step> steps = stepsRaw.stream().map(s -> {
-            BigDecimal lower = toBigDecimal(s.get("lower"));
-            Object upperRaw = s.get("upper");
-            BigDecimal upper = upperRaw != null && !String.valueOf(upperRaw).isBlank() ? toBigDecimal(upperRaw) : null;
-            BigDecimal multiplier = toBigDecimal(s.get("multiplier"));
-            boolean isCycle = Boolean.TRUE.equals(s.get("isCycleThreshold"));
-            return new StepCycleCalculator.Step(lower, upper, multiplier, isCycle);
-        }).toList();
-
-        String cycleMode = (String) reward.getOrDefault("cycleMode", "SINGLE_MATCH");
-        @SuppressWarnings("unchecked")
-        List<Number> thresholdsRaw = (List<Number>) reward.getOrDefault("cycleThresholdOrder", List.of());
-        List<BigDecimal> cycleThresholds = thresholdsRaw.stream().map(n -> new BigDecimal(n.toString())).toList();
 
         BigDecimal perOrderLimit = reward.containsKey("perOrderLimit") ? toBigDecimal(reward.get("perOrderLimit")) : null;
         BigDecimal accumulativeLimit = reward.containsKey("accumulativeLimit") ? toBigDecimal(reward.get("accumulativeLimit")) : null;
-        String excessStrategy = (String) reward.getOrDefault("excessStrategy", "STOP");
-        BigDecimal downgradeMultiplier = toBigDecimal(reward.getOrDefault("downgradeMultiplier", 1.0));
-
-        StepCycleCalculator.PreviewResult result = StepCycleCalculator.preview(
-                orderAmount, alreadyRewarded, steps, cycleMode, cycleThresholds,
-                perOrderLimit, accumulativeLimit, excessStrategy, downgradeMultiplier);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("orderAmount", orderAmount);
         data.put("alreadyRewarded", alreadyRewarded);
-        data.put("finalPoints", result.finalPoints());
-        data.put("theoreticalTotal", result.theoreticalTotal());
-        data.put("afterPerOrderCap", result.afterPerOrderCap());
-        data.put("remainingCap", result.remainingCap());
-        data.put("newTotal", result.newTotal());
-        data.put("segments", result.theoreticalSegments().stream().map(seg -> {
-            Map<String, Object> sm = new LinkedHashMap<>();
-            sm.put("amount", seg.amount());
-            sm.put("multiplier", seg.multiplier());
-            sm.put("points", seg.points());
-            return sm;
-        }).toList());
+
+        String rewardType = (String) reward.getOrDefault("type", "STEP_CYCLE");
+
+        if ("SIMPLE".equals(rewardType)) {
+            // ===== Simple mode preview =====
+            String simpleType = (String) reward.getOrDefault("simple_type", "MULTIPLIER");
+            double multiplier = ((Number) reward.getOrDefault("simple_multiplier", 1.0)).doubleValue();
+            BigDecimal fixedPoints = new BigDecimal(reward.getOrDefault("simple_fixed_points", 0).toString());
+            String calcMode = (String) reward.getOrDefault("calc_mode", "HEADER");
+
+            BigDecimal theoreticalTotal;
+            if ("LINE".equals(calcMode)) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> lineItems = (List<Map<String, Object>>) body.get("lineItems");
+                if (lineItems != null && !lineItems.isEmpty()) {
+                    if ("FIXED_POINTS".equals(simpleType)) {
+                        theoreticalTotal = fixedPoints.multiply(BigDecimal.valueOf(lineItems.size()));
+                    } else {
+                        BigDecimal sum = BigDecimal.ZERO;
+                        for (Map<String, Object> item : lineItems) {
+                            BigDecimal itemAmount = toBigDecimal(item.get("amount"));
+                            sum = sum.add(itemAmount.multiply(BigDecimal.valueOf(multiplier)));
+                        }
+                        theoreticalTotal = sum;
+                    }
+                } else {
+                    // Fall back to HEADER
+                    if ("FIXED_POINTS".equals(simpleType)) {
+                        theoreticalTotal = fixedPoints;
+                    } else {
+                        theoreticalTotal = orderAmount.multiply(BigDecimal.valueOf(multiplier));
+                    }
+                }
+            } else {
+                if ("FIXED_POINTS".equals(simpleType)) {
+                    theoreticalTotal = fixedPoints;
+                } else {
+                    theoreticalTotal = orderAmount.multiply(BigDecimal.valueOf(multiplier));
+                }
+            }
+
+            // Per-order limit
+            BigDecimal afterPerOrderCap = theoreticalTotal;
+            if (perOrderLimit != null && afterPerOrderCap.compareTo(perOrderLimit) > 0) {
+                afterPerOrderCap = perOrderLimit;
+            }
+
+            // Accumulative limit
+            BigDecimal remainingCap = null;
+            if (accumulativeLimit != null) {
+                remainingCap = accumulativeLimit.subtract(alreadyRewarded);
+                if (remainingCap.compareTo(BigDecimal.ZERO) <= 0) remainingCap = BigDecimal.ZERO;
+            }
+
+            // Excess strategy
+            String excessStrategy = (String) reward.getOrDefault("excessStrategy", "STOP");
+            BigDecimal downgradeMultiplier = toBigDecimal(reward.getOrDefault("downgradeMultiplier", 1.0));
+            boolean downgradeContinueCycle = Boolean.TRUE.equals(reward.getOrDefault("downgradeContinueCycle", false));
+
+            List<StepCycleCalculator.RewardSegment> segments = List.of(
+                new StepCycleCalculator.RewardSegment(orderAmount, BigDecimal.valueOf(multiplier), theoreticalTotal)
+            );
+            StepCycleCalculator.RewardResult excessResult = StepCycleCalculator.applyExcessControl(
+                segments, remainingCap, downgradeMultiplier, downgradeContinueCycle, excessStrategy);
+            BigDecimal finalPoints = excessResult.totalPoints();
+
+            data.put("theoreticalTotal", theoreticalTotal);
+            data.put("afterPerOrderCap", afterPerOrderCap);
+            data.put("remainingCap", remainingCap != null ? remainingCap : accumulativeLimit);
+            data.put("finalPoints", finalPoints);
+            data.put("newTotal", alreadyRewarded.add(finalPoints));
+            data.put("segments", List.of(Map.of("amount", orderAmount, "multiplier", multiplier, "points", theoreticalTotal)));
+        } else {
+            // ===== Step/Cycle mode preview =====
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> stepsRaw = (List<Map<String, Object>>) reward.getOrDefault("steps", List.of());
+
+            List<StepCycleCalculator.Step> steps = stepsRaw.stream().map(s -> {
+                BigDecimal lower = toBigDecimal(s.get("lower"));
+                Object upperRaw = s.get("upper");
+                BigDecimal upper = upperRaw != null && !String.valueOf(upperRaw).isBlank() ? toBigDecimal(upperRaw) : null;
+                BigDecimal multiplier = toBigDecimal(s.get("multiplier"));
+                boolean isCycle = Boolean.TRUE.equals(s.get("isCycleThreshold"));
+                boolean lowerInclusive = !Boolean.FALSE.equals(s.get("lowerInclusive")); // default true
+                boolean upperInclusive = Boolean.TRUE.equals(s.get("upperInclusive"));   // default false
+                return new StepCycleCalculator.Step(lower, upper, multiplier, isCycle, lowerInclusive, upperInclusive);
+            }).toList();
+
+            String cycleMode = (String) reward.getOrDefault("cycleMode", "SINGLE_MATCH");
+            @SuppressWarnings("unchecked")
+            List<Number> thresholdsRaw = (List<Number>) reward.getOrDefault("cycleThresholdOrder", List.of());
+            List<BigDecimal> cycleThresholds = thresholdsRaw.stream().map(n -> new BigDecimal(n.toString())).toList();
+
+            String excessStrategy = (String) reward.getOrDefault("excessStrategy", "STOP");
+            BigDecimal downgradeMultiplier = toBigDecimal(reward.getOrDefault("downgradeMultiplier", 1.0));
+
+            StepCycleCalculator.PreviewResult result = StepCycleCalculator.preview(
+                    orderAmount, alreadyRewarded, steps, cycleMode, cycleThresholds,
+                    perOrderLimit, accumulativeLimit, excessStrategy, downgradeMultiplier);
+
+            data.put("finalPoints", result.finalPoints());
+            data.put("theoreticalTotal", result.theoreticalTotal());
+            data.put("afterPerOrderCap", result.afterPerOrderCap());
+            data.put("remainingCap", result.remainingCap());
+            data.put("newTotal", result.newTotal());
+            data.put("segments", result.theoreticalSegments().stream().map(seg -> {
+                Map<String, Object> sm = new LinkedHashMap<>();
+                sm.put("amount", seg.amount());
+                sm.put("multiplier", seg.multiplier());
+                sm.put("points", seg.points());
+                return sm;
+            }).toList());
+        }
 
         return ResponseEntity.ok(ApiResponse.success(data));
     }

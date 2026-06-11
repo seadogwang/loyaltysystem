@@ -12,7 +12,8 @@ import java.util.*;
  */
 public class StepCycleCalculator {
 
-    public record Step(BigDecimal lower, BigDecimal upper, BigDecimal multiplier, boolean isCycleThreshold) {}
+    public record Step(BigDecimal lower, BigDecimal upper, BigDecimal multiplier, boolean isCycleThreshold,
+                       boolean lowerInclusive, boolean upperInclusive) {}
 
     public record RewardSegment(BigDecimal amount, BigDecimal multiplier, BigDecimal points) {}
 
@@ -46,8 +47,16 @@ public class StepCycleCalculator {
 
     private static BigDecimal getMultiplierForAmount(BigDecimal amount, List<Step> steps) {
         for (Step step : steps) {
-            if (amount.compareTo(step.lower()) >= 0 && (step.upper() == null || amount.compareTo(step.upper()) < 0)) {
-                return step.multiplier();
+            boolean lowerMatch = step.lowerInclusive()
+                    ? amount.compareTo(step.lower()) >= 0
+                    : amount.compareTo(step.lower()) > 0;
+            if (step.upper() == null) {
+                if (lowerMatch) return step.multiplier();
+            } else {
+                boolean upperMatch = step.upperInclusive()
+                        ? amount.compareTo(step.upper()) <= 0
+                        : amount.compareTo(step.upper()) < 0;
+                if (lowerMatch && upperMatch) return step.multiplier();
             }
         }
         return BigDecimal.ZERO;

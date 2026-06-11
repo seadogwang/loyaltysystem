@@ -5,7 +5,8 @@ import lombok.*;
 
 import java.io.Serializable;
 import java.time.Instant;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 标准领域事件事实 —— 插入 Drools KieSession 的事实包装器。
@@ -54,5 +55,18 @@ public class EventFact extends BaseDomainEvent {
     /** DRL 辅助：从 payload 中提取布尔值 */
     public Boolean getPayloadBool(String key) {
         return payload != null && payload.containsKey(key) && Boolean.parseBoolean(String.valueOf(payload.get(key)));
+    }
+
+    /** DRL 辅助：检查订单是否包含所有指定 SKU（组合商品条件） */
+    @SuppressWarnings("unchecked")
+    public boolean containsAllSkus(Set<String> requiredSkus) {
+        if (payload == null || !payload.containsKey("items")) return false;
+        List<Map<String, Object>> items = (List<Map<String, Object>>) payload.get("items");
+        if (items == null) return false;
+        Set<String> orderSkus = items.stream()
+                .map(item -> (String) item.get("sku"))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        return orderSkus.containsAll(requiredSkus);
     }
 }
