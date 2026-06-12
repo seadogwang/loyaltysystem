@@ -33,6 +33,7 @@ const ChannelList = lazy(() => import('../pages/ChannelList'));
 const MappingEditor = lazy(() => import('../pages/MappingEditor'));
 const ScriptingWorkbench = lazy(() => import('../components/ScriptingWorkbench/ScriptingWorkbench'));
 const SchemaEditor = lazy(() => import('../pages/SchemaEditor'));
+const EntityList = lazy(() => import('../pages/EntityList'));
 const MappingConfig = lazy(() => import('../pages/MappingConfig'));
 const DynamicRenderer = lazy(() => import('../components/DynamicRenderer/DynamicRenderer'));
 const RedemptionCancellation = lazy(() => import('../components/RedemptionCancellation'));
@@ -108,6 +109,10 @@ export const router = createBrowserRouter([
       },
 
       // 数据建模
+      {
+        path: 'entity-list',
+        element: <SuspenseWrapper><AuthGuard><EntityList /></AuthGuard></SuspenseWrapper>,
+      },
       {
         path: 'schema-editor',
         element: <SuspenseWrapper><AuthGuard><SchemaEditor /></AuthGuard></SuspenseWrapper>,
