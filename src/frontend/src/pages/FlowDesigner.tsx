@@ -192,34 +192,75 @@ const FlowDesigner: React.FC = () => {
         </div>
 
         {/* 右侧：属性面板 */}
-        <Card size="small" title={selectedNode ? '属性' : 'EL 与测试'} style={{ width: 280, flexShrink: 0 }}>
+        <Card size="small" title={selectedNode ? '节点属性' : 'EL 与测试'} style={{ width: 280, flexShrink: 0 }}>
           {selectedNode ? (
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Text strong>{(selectedNode.data as any)?.label}</Text>
-              <Tag color={(selectedNode.data as any)?.color}>{(selectedNode.data as any)?.componentName}</Tag>
-              <Divider style={{ margin: '4px 0' }} />
-              <Text style={{ fontSize: 11, color: '#999' }}>超时时间 (ms)</Text>
-              <InputNumber size="small" style={{ width: '100%' }} min={100} step={100}
-                value={(selectedNode.data as any)?.timeout || 5000}
-                onChange={(v) => {
-                  const updated = { ...selectedNode, data: { ...selectedNode.data, timeout: v } };
-                  useFlowStore.setState((s) => ({ nodes: s.nodes.map((n) => n.id === selectedNode.id ? updated : n), selectedNode: updated }));
-                }} />
-              <Text style={{ fontSize: 11, color: '#999' }}>重试次数</Text>
-              <InputNumber size="small" style={{ width: '100%' }} min={0} max={10}
-                value={(selectedNode.data as any)?.retryCount || 0}
-                onChange={(v) => {
-                  const updated = { ...selectedNode, data: { ...selectedNode.data, retryCount: v } };
-                  useFlowStore.setState((s) => ({ nodes: s.nodes.map((n) => n.id === selectedNode.id ? updated : n), selectedNode: updated }));
-                }} />
+              <div style={{ background: '#f5f5f5', borderRadius: 4, padding: 8 }}>
+                <Text strong style={{ fontSize: 13 }}>{(selectedNode.data as any)?.label}</Text>
+                <br />
+                <Tag color={(selectedNode.data as any)?.color} style={{ marginTop: 4 }}>
+                  {(selectedNode.data as any)?.componentName}
+                </Tag>
+              </div>
+              <Divider style={{ margin: '8px 0' }} />
+
+              {/* 组件参数 (cmpData) */}
+              <Text style={{ fontSize: 12, color: '#595959' }}>组件参数 (JSON)</Text>
+              <Input.TextArea
+                size="small"
+                rows={4}
+                style={{ fontFamily: 'monospace', fontSize: 11 }}
+                placeholder='{"key": "value"}'
+                value={typeof (selectedNode.data as any)?.cmpData === 'object'
+                  ? JSON.stringify((selectedNode.data as any)?.cmpData, null, 2)
+                  : ((selectedNode.data as any)?.cmpData || '')}
+                onChange={(e) => {
+                  try {
+                    const parsed = e.target.value.trim() ? JSON.parse(e.target.value) : undefined;
+                    const updated = { ...selectedNode, data: { ...selectedNode.data, cmpData: parsed } };
+                    useFlowStore.setState((s) => ({
+                      nodes: s.nodes.map((n) => n.id === selectedNode.id ? updated : n),
+                      selectedNode: updated,
+                    }));
+                  } catch {
+                    // 保存原始字符串，允许编辑中
+                    const updated = { ...selectedNode, data: { ...selectedNode.data, cmpData: e.target.value } };
+                    useFlowStore.setState((s) => ({
+                      nodes: s.nodes.map((n) => n.id === selectedNode.id ? updated : n),
+                      selectedNode: updated,
+                    }));
+                  }
+                }}
+              />
+
+              <Divider style={{ margin: '8px 0' }} />
+              <Text style={{ fontSize: 12, color: '#595959' }}>执行配置</Text>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 11, color: '#999', width: 60 }}>超时(ms)</Text>
+                <InputNumber size="small" style={{ flex: 1 }} min={100} step={100}
+                  value={(selectedNode.data as any)?.timeout || 5000}
+                  onChange={(v) => {
+                    const updated = { ...selectedNode, data: { ...selectedNode.data, timeout: v } };
+                    useFlowStore.setState((s) => ({ nodes: s.nodes.map((n) => n.id === selectedNode.id ? updated : n), selectedNode: updated }));
+                  }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 11, color: '#999', width: 60 }}>重试次数</Text>
+                <InputNumber size="small" style={{ flex: 1 }} min={0} max={10}
+                  value={(selectedNode.data as any)?.retryCount || 0}
+                  onChange={(v) => {
+                    const updated = { ...selectedNode, data: { ...selectedNode.data, retryCount: v } };
+                    useFlowStore.setState((s) => ({ nodes: s.nodes.map((n) => n.id === selectedNode.id ? updated : n), selectedNode: updated }));
+                  }} />
+              </div>
               <Checkbox
                 checked={(selectedNode.data as any)?.async || false}
                 onChange={(e) => {
                   const updated = { ...selectedNode, data: { ...selectedNode.data, async: e.target.checked } };
                   useFlowStore.setState((s) => ({ nodes: s.nodes.map((n) => n.id === selectedNode.id ? updated : n), selectedNode: updated }));
                 }}>异步执行</Checkbox>
-              <Divider style={{ margin: '4px 0' }} />
-              <Button size="small" danger icon={<DeleteOutlined />} onClick={removeSelectedNode}>删除节点</Button>
+              <Divider style={{ margin: '8px 0' }} />
+              <Button size="small" danger icon={<DeleteOutlined />} block onClick={removeSelectedNode}>删除节点</Button>
             </Space>
           ) : (
             <Space direction="vertical" style={{ width: '100%' }}>
