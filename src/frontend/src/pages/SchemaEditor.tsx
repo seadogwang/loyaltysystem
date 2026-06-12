@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
-import { Input, Select, Switch, Button, Typography, Space, Tag, message, Segmented } from 'antd';
-import { PlusOutlined, DeleteOutlined, SaveOutlined, SendOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Input, Select, Switch, Button, Typography, Space, Tag, message, Segmented, Spin, Tabs } from 'antd';
+import { PlusOutlined, DeleteOutlined, SaveOutlined, SendOutlined, ThunderboltOutlined, ReloadOutlined } from '@ant-design/icons';
+import api from '../api';
 
 const { Text } = Typography;
+
+// ==================== 类型 ====================
 
 interface SchemaField {
   key: string; type: string; title: string; required?: boolean;
   xComponent?: string; xReactions?: string; xDependencies?: string[]; deprecated?: boolean;
   children?: SchemaField[]; arrayItem?: SchemaField; indent: number;
+  description?: string; format?: string; enumValues?: string[];
 }
 
 const FIELD_TYPES = ['string','number','integer','boolean','object','array'];
@@ -22,7 +26,70 @@ const EFFECTS = [
   { label: '必填 (required)', value: 'require' }, { label: '非必填 (optional)', value: 'optional' },
 ];
 
+const ENTITY_OPTIONS = [
+  { label: '会员 (MEMBER)', value: 'MEMBER' },
+  { label: '订单 (ORDER)', value: 'ORDER' },
+  { label: '订单明细 (OrderItem)', value: 'OrderItem' },
+  { label: '交易事件 (TRANSACTION_EVENT)', value: 'TRANSACTION_EVENT' },
+  { label: '行为 (BEHAVIOR)', value: 'BEHAVIOR' },
+];
+
+// ==================== 默认 Schema ====================
+
+const DEFAULT_SCHEMAS: Record<string, any> = {
+  MEMBER: {
+    type:'object', properties:{
+      pet_name:{type:'string',title:'宠物名称','x-component':'Input'},
+      pet_type:{type:'string',title:'宠物类型','x-component':'Select'},
+      dog_breed:{type:'string',title:'犬种明细','x-component':'Input',
+        'x-reactions':"{{ $self.visible = ($deps[0] === 'dog') }}"},
+      member_level_index:{type:'number',title:'会员等级指数','x-component':'NumberPicker'},
+    },
+  },
+  ORDER: {
+    type:'object', properties:{
+      total_amount:{type:'number',title:'订单总金额'},
+      order_amount:{type:'number',title:'实付金额'},
+      order_id:{type:'string',title:'订单号'},
+      item_count:{type:'number',title:'商品数量'},
+      buyer_nick:{type:'string',title:'买家昵称'},
+      channel:{type:'string',title:'渠道'},
+      trade_status:{type:'string',title:'交易状态',enum:['PENDING','PAID','SHIPPED','FINISHED','CANCELLED']},
+      trade_time:{type:'string',title:'交易时间',format:'date-time'},
+      pay_time:{type:'string',title:'付款时间',format:'date-time'},
+      remark:{type:'string',title:'备注'},
+      member_id:{type:'string',title:'会员ID'},
+      item_category:{type:'string',title:'商品类目'},
+    },
+  },
+  OrderItem: {
+    type:'object', properties:{
+      sku:{type:'string',title:'SKU'},
+      category_id:{type:'string',title:'类目'},
+      price:{type:'number',title:'单价'},
+      quantity:{type:'number',title:'数量'},
+      product_name:{type:'string',title:'商品名'},
+    },
+  },
+  TRANSACTION_EVENT: {
+    type:'object', properties:{
+      total_amount:{type:'number',title:'订单总金额'},
+      eventType:{type:'string',title:'事件类型'},
+      channel:{type:'string',title:'渠道'},
+    },
+  },
+  BEHAVIOR: {
+    type:'object', properties:{
+      action:{type:'string',title:'行为动作'},
+      eventType:{type:'string',title:'事件类型'},
+      timestamp:{type:'string',title:'时间戳',format:'date-time'},
+    },
+  },
+};
+
 interface LinkageRule { id: string; dependField: string; operator: string; compareValue: string; effect: string; }
+
+// ==================== Schema 解析/序列化 ====================
 
 function parseSchemaToFields(schema: any, indent=0): SchemaField[] {
   if (!schema?.properties) return [];
@@ -32,6 +99,8 @@ function parseSchemaToFields(schema: any, indent=0): SchemaField[] {
       key, type: val.type||'string', title: val.title||val.description||'',
       required: schema.required?.includes(key), xComponent: val['x-component'],
       xReactions: val['x-reactions'], deprecated: val.deprecated, indent,
+      description: val.description, format: val.format,
+      enumValues: val.enum,
     };
     if (val.type==='object'&&val.properties) f.children = parseSchemaToFields(val, indent+1);
     if (val.type==='array'&&val.items?.properties) {
@@ -50,6 +119,9 @@ function fieldsToSchema(fields: SchemaField[]): any {
     if (f.xReactions) p['x-reactions']=f.xReactions;
     if (f.xDependencies?.length) p['x-dependencies']=f.xDependencies;
     if (f.deprecated) p.deprecated=true;
+    if (f.description) p.description=f.description;
+    if (f.format) p.format=f.format;
+    if (f.enumValues?.length) p.enum=f.enumValues;
     if (f.required) required.push(f.key);
     if (f.type==='object'&&f.children) p.properties=fieldsToSchema(f.children).properties;
     if (f.type==='array'&&f.arrayItem) p.items={type:'object',properties:fieldsToSchema(f.arrayItem.children||[]).properties};
@@ -85,7 +157,6 @@ function rulesToReactions(rules: LinkageRule[], allFields: SchemaField[]): strin
   return `{{ ${parts.join(' && ')} }}`;
 }
 
-/** 从 rules 生成 x-dependencies 数组 */
 function rulesToDeps(rules: LinkageRule[]): string[] {
   return rules.filter(r => r.dependField).map(r => r.dependField);
 }
@@ -103,10 +174,11 @@ const FieldRow: React.FC<{
       cursor:'pointer',background:selected?'#f0f5ff':'transparent',
       borderBottom:'1px solid #f5f5f5',fontSize:12,
     }}>
-      <span style={{ fontFamily:'monospace',color:'#1a1a1a',fontWeight:500,minWidth:60 }}>{field.key}</span>
-      <Tag color="blue" style={{ fontSize:10 }}>{field.type}</Tag>
+      <span style={{ fontFamily:'monospace',color:'#1a1a1a',fontWeight:500,minWidth:80 }}>{field.key}</span>
+      <Tag color={field.type==='number'?'blue':field.type==='string'?'green':field.type==='boolean'?'orange':field.type==='object'?'purple':field.type==='array'?'red':'default'} style={{ fontSize:10 }}>{field.type}</Tag>
       {field.title && <Text type="secondary" style={{ fontSize:11,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{field.title}</Text>}
       {field.required && <Text type="danger" style={{ fontSize:10 }}>*</Text>}
+      {field.format && <Tag color="cyan" style={{ fontSize:9 }}>{field.format}</Tag>}
       {field.deprecated && <Tag color="default" style={{ fontSize:9 }}>废</Tag>}
       {field.xReactions && <Tag color="orange" style={{ fontSize:9 }}>联动</Tag>}
       <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={e=>{e.stopPropagation();onDelete(field.key)}} style={{ height:20 }} />
@@ -115,7 +187,7 @@ const FieldRow: React.FC<{
   </>
 );
 
-// ==================== 属性面板 (含联动构建器) ====================
+// ==================== 属性面板 ====================
 
 const SchemaPropPanel: React.FC<{
   field: SchemaField|null; allFields: SchemaField[]; onUpdate: (f:SchemaField)=>void;
@@ -147,7 +219,6 @@ const SchemaPropPanel: React.FC<{
 
   return (
     <div style={{ width:320,borderLeft:'1px solid #f0f0f0',overflow:'auto',display:'flex',flexDirection:'column' }}>
-      {/* 基础属性 */}
       <div style={{ padding:14,borderBottom:'1px solid #f0f0f0' }}>
         <Text strong style={{ fontSize:12 }}>字段: {field.key}</Text>
         <div style={{ marginTop:8 }}>
@@ -162,6 +233,27 @@ const SchemaPropPanel: React.FC<{
           <Text type="secondary" style={{ fontSize:10 }}>类型</Text>
           <Select size="small" value={field.type} style={{ width:'100%' }} onChange={v=>onUpdate({...field,type:v})}
             options={FIELD_TYPES.map(t=>({label:t,value:t}))} />
+        </div>
+        <div style={{ marginTop:6 }}>
+          <Text type="secondary" style={{ fontSize:10 }}>格式 (format)</Text>
+          <Select size="small" value={field.format||''} style={{ width:'100%' }} allowClear
+            onChange={v=>onUpdate({...field,format:v||undefined})}
+            options={[
+              {label:'日期时间 (date-time)',value:'date-time'},
+              {label:'日期 (date)',value:'date'},
+              {label:'邮箱 (email)',value:'email'},
+              {label:'URI',value:'uri'},
+            ]} />
+        </div>
+        <div style={{ marginTop:6 }}>
+          <Text type="secondary" style={{ fontSize:10 }}>枚举值 (逗号分隔)</Text>
+          <Input size="small" value={field.enumValues?.join(',')||''}
+            onChange={e=>onUpdate({...field,enumValues:e.target.value?e.target.value.split(',').map(s=>s.trim()):undefined})}
+            placeholder="例如: GOLD,PLATINUM,DIAMOND" style={{ fontSize:11 }} />
+        </div>
+        <div style={{ marginTop:6 }}>
+          <Text type="secondary" style={{ fontSize:10 }}>描述</Text>
+          <Input size="small" value={field.description||''} onChange={e=>onUpdate({...field,description:e.target.value||undefined})} style={{ fontSize:11 }} />
         </div>
         <div style={{ marginTop:6 }}>
           <Text type="secondary" style={{ fontSize:10 }}>x-component</Text>
@@ -187,7 +279,6 @@ const SchemaPropPanel: React.FC<{
           <Segmented size="small" value={mode} onChange={v=>setMode(v as any)}
             options={[{label:'可视化',value:'visual'},{label:'手写',value:'raw'}]} style={{ fontSize:10 }} />
         </div>
-
         {mode==='visual'?(
           <div>
             {rules.map(r=>(
@@ -226,7 +317,6 @@ const SchemaPropPanel: React.FC<{
             </Text>
           </div>
         )}
-
         {field.xReactions && (
           <div style={{ marginTop:10,padding:8,background:'#f5f5f5',borderRadius:4 }}>
             <Text type="secondary" style={{ fontSize:9,display:'block',marginBottom:2 }}>x-reactions</Text>
@@ -247,17 +337,35 @@ const SchemaPropPanel: React.FC<{
 // ==================== 主组件 ====================
 
 const SchemaEditor: React.FC = () => {
-  const [entityType, setEntityType] = useState<'MEMBER'|'TRANSACTION'>('MEMBER');
-  const [fields, setFields] = useState<SchemaField[]>(()=>parseSchemaToFields({
-    type:'object',properties:{
-      pet_name:{type:'string',title:'宠物名称','x-component':'Input'},
-      pet_type:{type:'string',title:'宠物类型','x-component':'Select'},
-      dog_breed:{type:'string',title:'犬种明细','x-component':'Input',
-        'x-reactions':"{{ $self.visible = ($deps[0] === 'dog') }}"},
-      member_level_index:{type:'number',title:'会员等级指数','x-component':'NumberPicker'},
-    },
-  }));
+  const [entityType, setEntityType] = useState('ORDER');
+  const [fields, setFields] = useState<SchemaField[]>(() =>
+    parseSchemaToFields(DEFAULT_SCHEMAS['ORDER']));
   const [selectedField, setSelectedField] = useState<SchemaField|null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // 切换实体时加载对应 Schema
+  useEffect(() => {
+    loadSchema(entityType);
+  }, [entityType]);
+
+  const loadSchema = async (ent: string) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/schemas/${ent}`);
+      const schema = data?.data?.schema || data?.data;
+      if (schema?.properties && Object.keys(schema.properties).length > 0) {
+        setFields(parseSchemaToFields(schema));
+      } else {
+        setFields(parseSchemaToFields(DEFAULT_SCHEMAS[ent] || { type:'object',properties:{} }));
+      }
+    } catch {
+      setFields(parseSchemaToFields(DEFAULT_SCHEMAS[ent] || { type:'object',properties:{} }));
+    } finally {
+      setLoading(false);
+    }
+    setSelectedField(null);
+  };
 
   const addField = () => {
     const f: SchemaField = { key:`new_field_${Date.now()}`,type:'string',title:'新字段',indent:0 };
@@ -267,24 +375,72 @@ const SchemaEditor: React.FC = () => {
   const updateField = (f: SchemaField) => { setSelectedField(f); setFields([...fields]); };
   const deleteField = (k: string) => { setFields(fields.filter(f=>f.key!==k)); if(selectedField?.key===k) setSelectedField(null); };
 
+  // 保存 Schema
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const schema = fieldsToSchema(fields);
+      await api.post('/admin/schemas', {
+        entityType,
+        schema,
+        version: 'v1',
+      });
+      message.success(`已保存 ${entityType} Schema`);
+    } catch (e: any) {
+      message.error(e?.message || '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 发布 Schema
+  const handlePublish = async () => {
+    setSaving(true);
+    try {
+      const schema = fieldsToSchema(fields);
+      await api.post('/admin/schemas/publish', {
+        entityType,
+        schema,
+      });
+      message.success(`${entityType} Schema 已发布`);
+    } catch (e: any) {
+      message.error(e?.message || '发布失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div style={{ display:'flex',flex:1,minHeight:'calc(100vh - 120px)',background:'#fff' }}>
       {/* 编辑区 */}
       <div style={{ flex:1,display:'flex',flexDirection:'column',borderRight:'1px solid #f0f0f0' }}>
-        <div style={{ padding:'10px 16px',borderBottom:'1px solid #f0f0f0',display:'flex',justifyContent:'space-between' }}>
-          <Space>
-            <Button type={entityType==='MEMBER'?'primary':'default'} size="small" onClick={()=>setEntityType('MEMBER')} style={{ fontSize:11 }}>会员 (ext_attributes)</Button>
-            <Button type={entityType==='TRANSACTION'?'primary':'default'} size="small" onClick={()=>setEntityType('TRANSACTION')} style={{ fontSize:11 }}>交易 (payload)</Button>
-            <Button size="small" icon={<PlusOutlined />} style={{ fontSize:11 }}>新建业务实体</Button>
+        <div style={{ padding:'10px 16px',borderBottom:'1px solid #f0f0f0',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+          <Space wrap>
+            {ENTITY_OPTIONS.map(e => (
+              <Button key={e.value}
+                type={entityType===e.value?'primary':'default'}
+                size="small"
+                onClick={() => setEntityType(e.value)}
+                style={{ fontSize:11 }}
+              >{e.label}</Button>
+            ))}
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => loadSchema(entityType)} style={{ fontSize:11 }}>刷新</Button>
           </Space>
           <Space>
-            <Button size="small" icon={<SaveOutlined />} onClick={()=>message.success('已保存')} style={{ fontSize:11 }}>保存草稿</Button>
-            <Button size="small" type="primary" icon={<SendOutlined />} onClick={()=>message.success('已发布')} style={{ fontSize:11 }}>发布</Button>
+            <Button size="small" icon={<SaveOutlined />} onClick={handleSave} loading={saving} style={{ fontSize:11 }}>保存</Button>
+            <Button size="small" type="primary" icon={<SendOutlined />} onClick={handlePublish} loading={saving} style={{ fontSize:11 }}>发布</Button>
           </Space>
         </div>
-        <div style={{ flex:1,overflow:'auto',padding:'8px 0' }}>
-          {fields.map(f=><FieldRow key={f.key} field={f} onUpdate={updateField} onDelete={deleteField} onSelect={setSelectedField} selected={selectedField?.key===f.key} />)}
-        </div>
+        {loading ? (
+          <Spin style={{ margin: '40px auto' }} />
+        ) : (
+          <div style={{ flex:1,overflow:'auto',padding:'8px 0' }}>
+            {fields.map(f => (
+              <FieldRow key={f.key} field={f} onUpdate={updateField} onDelete={deleteField}
+                onSelect={setSelectedField} selected={selectedField?.key===f.key} />
+            ))}
+          </div>
+        )}
         <div style={{ padding:'8px 16px',borderTop:'1px solid #f0f0f0' }}>
           <Button size="small" icon={<PlusOutlined />} onClick={addField} block style={{ fontSize:11 }}>添加字段</Button>
         </div>

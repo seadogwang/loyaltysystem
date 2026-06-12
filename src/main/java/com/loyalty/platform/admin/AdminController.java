@@ -13,6 +13,7 @@ import com.loyalty.platform.domain.repository.TierDefinitionRepository;
 import com.loyalty.platform.flow.EventContext;
 import com.loyalty.platform.activity.StepCycleCalculator;
 import com.loyalty.platform.activity.UnifiedPromoDrlGenerator;
+import com.loyalty.platform.api.service.SchemaService;
 import com.loyalty.platform.rules.AiRuleGenerationService;
 import com.loyalty.platform.rules.DroolsTestRunner;
 import com.loyalty.platform.rules.KieBaseCacheManager;
@@ -63,6 +64,7 @@ public class AdminController {
     private final FlowDefinitionRepository flowDefRepo;
     private final FlowExecutor flowExecutor;
     private final UnifiedPromoDrlGenerator promoDrlGenerator;
+    private final SchemaService schemaService;
 
     public AdminController(AiRuleGenerationService aiRuleGen,
                            ProgramRepository programRepo,
@@ -77,7 +79,8 @@ public class AdminController {
                            DroolsTestRunner droolsTestRunner,
                            FlowDefinitionRepository flowDefRepo,
                            FlowExecutor flowExecutor,
-                           UnifiedPromoDrlGenerator promoDrlGenerator) {
+                           UnifiedPromoDrlGenerator promoDrlGenerator,
+                           SchemaService schemaService) {
         this.aiRuleGen = aiRuleGen;
         this.programRepo = programRepo;
         this.pointTypeRepo = pointTypeRepo;
@@ -92,6 +95,7 @@ public class AdminController {
         this.flowDefRepo = flowDefRepo;
         this.flowExecutor = flowExecutor;
         this.promoDrlGenerator = promoDrlGenerator;
+        this.schemaService = schemaService;
     }
 
     @GetMapping("/cache/enums")
@@ -758,6 +762,54 @@ public class AdminController {
         }
 
         return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    // ==================== Schema 管理 ====================
+
+    /**
+     * 保存 Schema 草稿
+     */
+    @PostMapping("/schemas")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> saveSchema(@RequestBody Map<String, Object> body) {
+        String pc = TenantContext.getRequired();
+        String entityType = (String) body.get("entityType");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> schema = (Map<String, Object>) body.get("schema");
+
+        if (entityType == null || entityType.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("ERR_INVALID", "entityType 不能为空"));
+        }
+
+        SchemaVersion sv = schemaService.saveSchema(pc, entityType, schema != null ? schema : Map.of());
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("id", sv.getId());
+        data.put("entityType", sv.getSchemaType());
+        data.put("version", sv.getVersion());
+        data.put("status", sv.getStatus());
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
+    /**
+     * 发布 Schema
+     */
+    @PostMapping("/schemas/publish")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> publishSchema(@RequestBody Map<String, Object> body) {
+        String pc = TenantContext.getRequired();
+        String entityType = (String) body.get("entityType");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> schema = (Map<String, Object>) body.get("schema");
+
+        if (entityType == null || entityType.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("ERR_INVALID", "entityType 不能为空"));
+        }
+
+        SchemaVersion sv = schemaService.publishSchema(pc, entityType, schema != null ? schema : Map.of());
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("id", sv.getId());
+        data.put("entityType", sv.getSchemaType());
+        data.put("version", sv.getVersion());
+        data.put("status", sv.getStatus());
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     // ==================== 流程管理 ====================

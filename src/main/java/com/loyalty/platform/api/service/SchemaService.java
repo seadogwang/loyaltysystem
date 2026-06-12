@@ -95,4 +95,30 @@ public class SchemaService {
             log.warn("[SchemaService] Cannot inject _schema_version into immutable map");
         }
     }
+
+    /** 保存或更新 Schema（草稿） */
+    public SchemaVersion saveSchema(String programCode, String schemaType, Map<String, Object> schemaJson) {
+        SchemaVersion existing = schemaRepo.findCurrentByType(programCode, schemaType).orElse(null);
+        int nextVersion = existing != null ? existing.getVersion() + 1 : 1;
+        String schemaCode = schemaType.toLowerCase() + "_schema";
+
+        SchemaVersion sv = SchemaVersion.builder()
+                .programCode(programCode)
+                .schemaType(schemaType.toUpperCase())
+                .schemaCode(schemaCode)
+                .version(nextVersion)
+                .status("DRAFT")
+                .schemaJson(schemaJson)
+                .build();
+
+        return schemaRepo.save(sv);
+    }
+
+    /** 发布 Schema */
+    public SchemaVersion publishSchema(String programCode, String schemaType, Map<String, Object> schemaJson) {
+        SchemaVersion sv = saveSchema(programCode, schemaType, schemaJson);
+        sv.setStatus("PUBLISHED");
+        sv.setPublishedAt(java.time.LocalDateTime.now());
+        return schemaRepo.save(sv);
+    }
 }
