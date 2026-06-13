@@ -172,27 +172,54 @@ const MappingModal: React.FC<{
   const data = (edge.data as EdgeMeta) || { relationType: 'FOREIGN_KEY', mappingRules: [] };
   const rules = data.mappingRules || [];
   const typeLabel = data.relationType === 'INBOUND_MAPPING' ? '入站映射' : data.relationType === 'OUTBOUND_MAPPING' ? '出站映射' : '业务关系';
-  const edgeColor = data.relationType === 'INBOUND_MAPPING' ? '#22c55e' : data.relationType === 'OUTBOUND_MAPPING' ? '#f97316' : '#3b82f6';
+  const dirColor = data.relationType === 'INBOUND_MAPPING' ? '#22c55e' : data.relationType === 'OUTBOUND_MAPPING' ? '#f97316' : '#3b82f6';
+
+  const srcEntity = ENTITIES.find(e => e.entityType === edge.source);
+  const tgtEntity = ENTITIES.find(e => e.entityType === edge.target);
+  const srcFields = srcEntity?.fields || [];
+  const tgtFields = tgtEntity?.fields || [];
+  const srcFieldOpts = srcFields.map(f => ({ label: f.name, value: f.name }));
+  const tgtFieldOpts = tgtFields.map(f => ({ label: f.name, value: f.name }));
 
   const updateRules = (newRules: MappingRule[]) => onUpdate(edge.id, { ...data, mappingRules: newRules });
 
   return (
-    <Modal title="连线映射配置" open={open} onCancel={onClose} width={560} footer={null}>
-      <div style={{ background: '#f8fafc', borderRadius: 6, padding: 12, marginBottom: 12 }}>
-        <Tag color={data.relationType === 'FOREIGN_KEY' ? 'blue' : data.relationType === 'INBOUND_MAPPING' ? 'green' : 'orange'}>{typeLabel}</Tag>
-        <div style={{ marginTop: 6, fontSize: 13, fontFamily: 'monospace' }}>
-          {edge.source} <Text type="secondary">→</Text> {edge.target}
+    <Modal title={`${typeLabel}配置`} open={open} onCancel={onClose} width={640} footer={null}>
+      {/* Source/Target info with entity cards */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+        <div style={{ flex: 1, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 10 }}>
+          <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>源</Text>
+          <Text strong style={{ fontSize: 13 }}>{edge.source}</Text>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+            {srcEntity?.entityCategory && CAT_LABELS[srcEntity.entityCategory]} · {srcFields.length} fields
+          </div>
+        </div>
+        <div style={{ fontSize: 20, color: dirColor, fontWeight: 700 }}>→</div>
+        <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 10 }}>
+          <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>目标</Text>
+          <Text strong style={{ fontSize: 13 }}>{edge.target}</Text>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+            {tgtEntity?.entityCategory && CAT_LABELS[tgtEntity.entityCategory]} · {tgtFields.length} fields
+          </div>
         </div>
       </div>
+
       <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>字段映射规则</Text>
+      {rules.length === 0 && (
+        <div style={{ padding: 16, textAlign: 'center', color: '#94a3b8', fontSize: 12, background: '#f8fafc', borderRadius: 6, marginBottom: 8 }}>
+          暂无映射规则，点击下方按钮添加
+        </div>
+      )}
       {rules.map((r, i) => (
         <div key={r.key} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
-          <Input size="small" style={{ width: 90, fontSize: 12 }} placeholder="源字段" value={r.source}
-            onChange={e => { const ns = [...rules]; ns[i] = { ...ns[i], source: e.target.value }; updateRules(ns); }} />
+          <Select size="small" style={{ width: 140 }} showSearch value={r.source || undefined} placeholder="选择源字段"
+            options={srcFieldOpts}
+            onChange={v => { const ns = [...rules]; ns[i] = { ...ns[i], source: v }; updateRules(ns); }} />
           <Text type="secondary" style={{ fontSize: 12 }}>→</Text>
-          <Input size="small" style={{ width: 90, fontSize: 12 }} placeholder="目标字段" value={r.target}
-            onChange={e => { const ns = [...rules]; ns[i] = { ...ns[i], target: e.target.value }; updateRules(ns); }} />
-          <Select size="small" style={{ width: 100 }} value={r.type}
+          <Select size="small" style={{ width: 140 }} showSearch value={r.target || undefined} placeholder="选择目标字段"
+            options={tgtFieldOpts}
+            onChange={v => { const ns = [...rules]; ns[i] = { ...ns[i], target: v }; updateRules(ns); }} />
+          <Select size="small" style={{ width: 110 }} value={r.type}
             onChange={v => { const ns = [...rules]; ns[i] = { ...ns[i], type: v as 'PATH' | 'EXPRESSION' | 'CONSTANT' }; updateRules(ns); }}
             options={[{ label: '直接映射', value: 'PATH' }, { label: '表达式', value: 'EXPRESSION' }, { label: '常量', value: 'CONSTANT' }]} />
           <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => updateRules(rules.filter((_, j) => j !== i))} />
