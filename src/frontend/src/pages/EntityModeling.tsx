@@ -80,12 +80,49 @@ const ENTITIES: EntityDef[] = [
 
 const MAX_VISIBLE = 8;
 
-const EntityNode: React.FC<NodeProps> = ({ data, selected }) => {
-  const entity = data as unknown as EntityDef;
+const EntityNode: React.FC<NodeProps & { onEditToggle?: (id: string) => void }> = ({ id, data, selected, onEditToggle }) => {
+  const entity = data as unknown as EntityDef & { editing?: boolean; onFieldChange?: (idx: number, f: string, v: string) => void; onAddField?: () => void; onDelField?: (idx: number) => void };
   const colors = NODE_COLORS[entity.entityCategory] || NODE_COLORS.BUSINESS;
   const fields = entity.fields || [];
-  const visibleFields = fields.length <= MAX_VISIBLE ? fields : fields.slice(0, MAX_VISIBLE);
+  const visibleFields = entity.editing ? fields : (fields.length <= MAX_VISIBLE ? fields : fields.slice(0, MAX_VISIBLE));
   const hiddenCount = fields.length - MAX_VISIBLE;
+
+  if (entity.editing) {
+    return (
+      <div style={{
+        background: '#fff', borderRadius: 8, minWidth: 240, maxWidth: 380,
+        boxShadow: '0 0 0 2px #ec4899, 0 6px 20px rgba(0,0,0,0.15)',
+        border: '1px solid #ec4899',
+      }}>
+        <div style={{ height: 3, background: entity.color, borderRadius: '8px 8px 0 0' }} />
+        <div style={{ padding: '8px 12px 6px', background: colors.bg, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input value={entity.entityType} readOnly style={{ fontWeight: 600, fontSize: 13, fontFamily: 'monospace', border: '1px solid #e2e8f0', borderRadius: 4, padding: '1px 6px', width: 140 }} />
+          <Tag color={colors.tag} style={{ fontSize: 10, margin: 0 }}>{CAT_LABELS[entity.entityCategory]}</Tag>
+          <Button size="small" style={{ marginLeft: 'auto', fontSize: 11, height: 22 }} onClick={() => onEditToggle?.(id)}>完成</Button>
+        </div>
+        {visibleFields.map((f, i) => (
+          <div key={i} style={{ display: 'flex', gap: 4, padding: '2px 8px', alignItems: 'center', borderTop: '1px solid #f1f5f9' }}>
+            <input value={f.name} placeholder="field"
+              onChange={e => entity.onFieldChange?.(i, 'name', e.target.value)}
+              style={{ flex: 1, fontFamily: 'monospace', fontSize: 11, border: '1px solid #e2e8f0', borderRadius: 3, padding: '2px 4px' }} />
+            <input value={f.type} placeholder="type"
+              onChange={e => entity.onFieldChange?.(i, 'type', e.target.value)}
+              style={{ width: 80, fontSize: 10, border: '1px solid #e2e8f0', borderRadius: 3, padding: '2px 4px', color: '#94a3b8' }} />
+            <label style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input type="checkbox" checked={f.primaryKey || false} onChange={e => entity.onFieldChange?.(i, 'primaryKey', String(e.target.checked))} />
+              PK
+            </label>
+            <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => entity.onDelField?.(i)} style={{ height: 20, minWidth: 20 }} />
+          </div>
+        ))}
+        <div style={{ padding: '4px 8px', borderTop: '1px solid #f1f5f9' }}>
+          <Button size="small" type="dashed" icon={<PlusOutlined />} block onClick={() => entity.onAddField?.()} style={{ fontSize: 11 }}>
+            添加字段
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -249,6 +286,53 @@ const EntityModeling: React.FC = () => {
   const [mode, setMode] = React.useState<'inbound' | 'outbound'>('inbound');
   const [channel, setChannel] = React.useState('TMALL');
   const [sidebar, setSidebar] = React.useState(true);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+
+  const toggleEdit = React.useCallback((nodeId: string) => {
+    setEditingId(prev => prev === nodeId ? null : nodeId);
+  }, []);
+
+  const handleFieldChange = React.useCallback((nodeId: string, fieldIdx: number, field: string, value: string) => {
+    setNodes(nds => nds.map(n => {
+      if (n.id !== nodeId) return n;
+      const data = n.data as unknown as EntityDef;
+      const fields = [...data.fields];
+      if (field === 'primaryKey') {
+        fields[fieldIdx] = { ...fields[fieldIdx], primaryKey: value === 'true' };
+      } else {
+        fields[fieldIdx] = { ...fields[fieldIdx], [field]: value };
+      }
+      return { ...n, data: { ...data, fields } };
+    }));
+  }, [setNodes]);
+
+  const handleAddField = React.useCallback((nodeId: string) => {
+    setNodes(nds => nds.map(n => {
+      if (n.id !== nodeId) return n;
+      const data = n.data as unknown as EntityDef;
+      return { ...n, data: { ...data, fields: [...data.fields, { name: `field_${data.fields.length + 1}`, type: 'string' }] } };
+    }));
+  }, [setNodes]);
+
+  const handleDelField = React.useCallback((nodeId: string, fieldIdx: number) => {
+    setNodes(nds => nds.map(n => {
+      if (n.id !== nodeId) return n;
+      const data = n.data as unknown as EntityDef;
+      return { ...n, data: { ...data, fields: data.fields.filter((_, i) => i !== fieldIdx) } };
+    }));
+  }, [setNodes]);
+
+  // Inject editing state and handlers into node data
+  const nodesWithEdit = React.useMemo(() => nodes.map(n => ({
+    ...n,
+    data: {
+      ...n.data,
+      editing: n.id === editingId,
+      onFieldChange: (idx: number, f: string, v: string) => handleFieldChange(n.id, idx, f, v),
+      onAddField: () => handleAddField(n.id),
+      onDelField: (idx: number) => handleDelField(n.id, idx),
+    },
+  })), [nodes, editingId, handleFieldChange, handleAddField, handleDelField]);
 
   const onConnect = useCallback((conn: Connection) => {
     if (!conn.source || !conn.target) return;
@@ -295,10 +379,11 @@ const EntityModeling: React.FC = () => {
       <div style={{ display: 'flex', height: 'calc(100vh - 150px)', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
         <div style={{ flex: 1 }}>
           <ReactFlow
-            nodes={nodes} edges={edges}
+            nodes={nodesWithEdit} edges={edges}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={(_, n) => { setSelNode(n.id); setSelEdge(null); setSidebar(true); }}
+            onNodeDoubleClick={(_, n) => { setSelNode(n.id); toggleEdit(n.id); setSidebar(true); }}
             onEdgeClick={(_, e) => { setSelEdge(e.id); setSelNode(null); setSidebar(true); }}
             onPaneClick={() => { setSelNode(null); setSelEdge(null); }}
             nodeTypes={nodeTypes as any} fitView
