@@ -40,10 +40,11 @@ const menuItems: MenuItemType[] = [
   {
     key: 'settings', icon: <SettingOutlined />, label: '设置',
     children: [
+              { key: 'entity-modeling', icon: <PartitionOutlined />, label: '实体建模', path: '/entity-modeling' },
               { key: 'entity-list', icon: <BuildOutlined />, label: '实体列表', path: '/entity-list' },
               { key: 'entity-mapping', icon: <ApiOutlined />, label: 'API实体', path: '/entity-mapping' },
               { key: 'schema-editor', icon: <BuildOutlined />, label: 'Schema 编辑器', path: '/schema-editor' },
-      { key: 'mapping-config', icon: <ApiOutlined />, label: '映射配置器', path: '/mapping-config' },
+              { key: 'mapping-config', icon: <ApiOutlined />, label: '映射配置器', path: '/mapping-config' },
       { key: 'points-grant', icon: <DollarOutlined />, label: '积分类型', path: '/points/grant' },
       { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers' },
       { key: 'channel-list', icon: <ApiOutlined />, label: '渠道列表', path: '/channels' },

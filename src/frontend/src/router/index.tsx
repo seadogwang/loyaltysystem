@@ -35,6 +35,7 @@ const ScriptingWorkbench = lazy(() => import('../components/ScriptingWorkbench/S
 const SchemaEditor = lazy(() => import('../pages/SchemaEditor'));
 const EntityList = lazy(() => import('../pages/EntityList'));
 const EntityMapping = lazy(() => import('../pages/EntityMapping'));
+const EntityModeling = lazy(() => import('../pages/EntityModeling'));
 const MappingConfig = lazy(() => import('../pages/MappingConfig'));
 const DynamicRenderer = lazy(() => import('../components/DynamicRenderer/DynamicRenderer'));
 const RedemptionCancellation = lazy(() => import('../components/RedemptionCancellation'));
@@ -110,6 +111,10 @@ export const router = createBrowserRouter([
       },
 
       // 数据建模
+      {
+        path: 'entity-modeling',
+        element: <SuspenseWrapper><AuthGuard><EntityModeling /></AuthGuard></SuspenseWrapper>,
+      },
       {
         path: 'entity-list',
         element: <SuspenseWrapper><AuthGuard><EntityList /></AuthGuard></SuspenseWrapper>,
