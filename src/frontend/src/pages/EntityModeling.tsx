@@ -1,12 +1,13 @@
 import React, { useCallback, useMemo } from 'react';
 import {
-  ReactFlow, Background, Controls, MiniMap, MarkerType, Panel, Handle, Position,
+  ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, MarkerType, Panel, Handle, Position,
   type Node, type Edge, type Connection, useNodesState, useEdgesState, addEdge, type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Button, Space, Typography, Tag, Select, Tabs, Card, Input, message, Empty } from 'antd';
 import { SaveOutlined, SendOutlined, DeleteOutlined, PlusOutlined, EditOutlined, CloseOutlined } from '@ant-design/icons';
-import PageWrapper from '../components/PageWrapper';
+import { useReactFlow } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 
 const { Title, Text } = Typography;
 
@@ -362,9 +363,10 @@ const EntityModeling: React.FC = () => {
   }, [nodes, setEdges]);
 
   return (
-    <PageWrapper>
+    <ReactFlowProvider>
+    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <Title level={4} style={{ margin: 0 }}>统一实体建模与映射</Title>
+        <Title level={4} style={{ margin: 0 }}>实体建模</Title>
         <Space>
           <Select size="small" value={mode} onChange={setMode} style={{ width: 80 }}
             options={[{ label: '入站', value: 'inbound' }, { label: '出站', value: 'outbound' }]} />
@@ -409,7 +411,8 @@ const EntityModeling: React.FC = () => {
           />
         )}
       </div>
-    </PageWrapper>
+    </div>
+    </ReactFlowProvider>
   );
 };
 

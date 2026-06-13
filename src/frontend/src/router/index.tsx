@@ -83,6 +83,12 @@ export const router = createBrowserRouter([
     element: <SuspenseWrapper><Onboarding /></SuspenseWrapper>,
   },
 
+  // 实体建模（独立全宽页面 — ChartDB 风格，无 AppShell）
+  {
+    path: '/entity-modeling',
+    element: <SuspenseWrapper><EntityModeling /></SuspenseWrapper>,
+  },
+
   // ====== 主应用（AppShell 布局 — 完成基础设置后才使用） ======
   {
     path: '/',
@@ -111,10 +117,6 @@ export const router = createBrowserRouter([
       },
 
       // 数据建模
-      {
-        path: 'entity-modeling',
-        element: <SuspenseWrapper><AuthGuard><EntityModeling /></AuthGuard></SuspenseWrapper>,
-      },
       {
         path: 'entity-list',
         element: <SuspenseWrapper><AuthGuard><EntityList /></AuthGuard></SuspenseWrapper>,
