@@ -141,12 +141,12 @@ const EntityNode: React.FC<NodeProps & { onEditToggle?: (id: string) => void }> 
       {visibleFields.map((f, i) => (
         <div key={f.name} style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '3px 12px', height: 26, borderTop: i > 0 ? '1px solid #f1f5f9' : 'none', fontSize: 12 }}>
           <Handle type="target" position={Position.Left} id={`${f.name}-t`}
-            style={{ position: 'absolute', left: -5, top: 13, width: 8, height: 8, background: f.primaryKey ? '#f59e0b' : '#94a3b8', border: '2px solid #fff', opacity: selected ? 1 : 0 }} />
+            style={{ position: 'absolute', left: -5, top: 13, width: 8, height: 8, background: f.primaryKey ? '#f59e0b' : '#94a3b8', border: '2px solid #fff', opacity: selected ? 1 : 0.5 }} />
           {f.primaryKey && <Text style={{ fontSize: 10, color: '#f59e0b', marginRight: 4, fontWeight: 700 }}>PK</Text>}
           <Text style={{ flex: 1, fontFamily: 'monospace', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</Text>
           <Text style={{ fontSize: 10, color: '#94a3b8', background: '#f8fafc', borderRadius: 3, padding: '0 4px' }}>{f.type}</Text>
           <Handle type="source" position={Position.Right} id={`${f.name}-s`}
-            style={{ position: 'absolute', right: -5, top: 13, width: 8, height: 8, background: '#3b82f6', border: '2px solid #fff', opacity: selected ? 1 : 0 }} />
+            style={{ position: 'absolute', right: -5, top: 13, width: 8, height: 8, background: '#3b82f6', border: '2px solid #fff', opacity: selected ? 1 : 0.5 }} />
         </div>
       ))}
       {fields.length > MAX_VISIBLE && (
