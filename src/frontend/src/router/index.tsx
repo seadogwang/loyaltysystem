@@ -36,6 +36,7 @@ const SchemaEditor = lazy(() => import('../pages/SchemaEditor'));
 const EntityList = lazy(() => import('../pages/EntityList'));
 const EntityMapping = lazy(() => import('../pages/EntityMapping'));
 const EntityModeling = lazy(() => import('../pages/EntityModeling'));
+const ChartDBEmbed = lazy(() => import('../pages/ChartDBEmbed'));
 const MappingConfig = lazy(() => import('../pages/MappingConfig'));
 const DynamicRenderer = lazy(() => import('../components/DynamicRenderer/DynamicRenderer'));
 const RedemptionCancellation = lazy(() => import('../components/RedemptionCancellation'));
@@ -81,6 +82,12 @@ export const router = createBrowserRouter([
   {
     path: '/onboarding',
     element: <SuspenseWrapper><Onboarding /></SuspenseWrapper>,
+  },
+
+  // ChartDB 嵌入（独立全宽页面）
+  {
+    path: '/chartdb',
+    element: <SuspenseWrapper><ChartDBEmbed /></SuspenseWrapper>,
   },
 
   // ====== 主应用（AppShell 布局 — 完成基础设置后才使用） ======

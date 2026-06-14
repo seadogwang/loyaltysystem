@@ -40,6 +40,7 @@ const menuItems: MenuItemType[] = [
   {
     key: 'settings', icon: <SettingOutlined />, label: '设置',
     children: [
+              { key: 'chartdb', icon: <PartitionOutlined />, label: 'ChartDB建模', path: '/chartdb' },
               { key: 'entity-modeling', icon: <PartitionOutlined />, label: '实体建模', path: '/entity-modeling' },
               { key: 'entity-list', icon: <BuildOutlined />, label: '实体列表', path: '/entity-list' },
               { key: 'entity-mapping', icon: <ApiOutlined />, label: 'API实体', path: '/entity-mapping' },
