@@ -3,6 +3,7 @@ import { ApiOutlined, ThunderboltOutlined, CodeOutlined, SendOutlined, PlayCircl
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, Handle, Position, MarkerType,
   useNodesState, useEdgesState, addEdge, type Node, type Edge, type Connection, type NodeProps,
+  BaseEdge, getSmoothStepPath, type EdgeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -20,6 +21,40 @@ const ACTION_NODES = [
   { type: 'transform', label: '数据转换', desc: '转换数据格式', color: '#f97316', icon: <CodeOutlined /> },
 ];
 
+// ==================== Custom Edge with "+" button ====================
+
+const PlusEdge: React.FC<EdgeProps> = ({
+  id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition,
+  style = {}, markerEnd, data,
+}) => {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
+  });
+
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} />
+      {/* "+" button at the midpoint */}
+      <foreignObject
+        width={24} height={24}
+        x={labelX - 12} y={labelY - 12}
+        style={{ overflow: 'visible' }}
+      >
+        <div style={{
+          width: 24, height: 24, borderRadius: 6,
+          background: '#e5e7eb', border: '2px solid #d1d5db',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', color: '#6b7280', fontSize: 16,
+        }}>
+          +
+        </div>
+      </foreignObject>
+    </>
+  );
+};
+
+const edgeTypes = { plus: PlusEdge };
+
 // ==================== n8n-style Custom Node ====================
 
 const WorkflowNode: React.FC<NodeProps> = ({ id, data, selected }) => {
@@ -36,7 +71,7 @@ const WorkflowNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       {/* Toolbar */}
       {hovered && (
         <div style={{
-          position: 'absolute', top: -32, left: 0, right: 0,
+          position: 'absolute', top: -28, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', justifyContent: 'center', gap: 2, zIndex: 10,
         }}>
           <button style={toolBtnStyle} title="执行"><PlayCircleOutlined style={{ fontSize: 12 }} /></button>
@@ -58,54 +93,42 @@ const WorkflowNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         </div>
       )}
 
-      {/* Handle - Input */}
+      {/* Handle - Input (left, hidden for trigger) */}
       {!isTrigger && (
-        <Handle type="target" position={Position.Top} id="input"
-          style={{ background: '#6b7280', width: 10, height: 10, border: '2px solid #fff', top: -5 }} />
+        <Handle type="target" position={Position.Left} id="input"
+          style={{ background: '#9ca3af', width: 8, height: 8, border: '2px solid #fff', left: -4, top: '50%' }} />
       )}
 
       {/* Node body */}
       <div style={{
-        width: 120, background: '#fff',
+        width: 40, height: 40, background: '#fff',
         border: selected ? `2px solid ${nodeData.color}` : '1px solid #e5e7eb',
-        borderRadius: 12, overflow: 'hidden',
+        borderRadius: 8, overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
         boxShadow: selected ? '0 4px 16px rgba(0,0,0,0.1)' : '0 1px 3px rgba(0,0,0,0.05)',
         transition: 'box-shadow 0.15s',
       }}>
-        {/* Icon area */}
         <div style={{
-          padding: '16px 0 8px', display: 'flex', justifyContent: 'center',
-          background: `${nodeData.color}08`,
+          width: 28, height: 28, borderRadius: 6,
+          background: `${nodeData.color}15`, color: nodeData.color,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 16,
         }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: 12,
-            background: `${nodeData.color}15`, color: nodeData.color,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 24,
-          }}>
-            {nodeData.icon}
-          </div>
-        </div>
-        {/* Label */}
-        <div style={{ padding: '6px 12px 10px', textAlign: 'center' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#1f2937' }}>{nodeData.label}</div>
+          {nodeData.icon}
         </div>
       </div>
 
-      {/* Handle - Output with "+" */}
-      <Handle type="source" position={Position.Bottom} id="output"
-        style={{ background: 'transparent', width: 24, height: 24, border: 'none', bottom: -12 }}>
-        <div style={{
-          width: 24, height: 24, borderRadius: 6, background: '#e5e7eb',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#6b7280', fontSize: 16, fontWeight: 300,
-          transition: 'all 0.15s',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.background = nodeData.color; e.currentTarget.style.color = '#fff'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#e5e7eb'; e.currentTarget.style.color = '#6b7280'; }}
-        >
-          +
-        </div>
+      {/* Handle - Output (right) with "+" */}
+      <Handle type="source" position={Position.Right} id="output"
+        style={{ background: 'transparent', border: 'none', width: 50, height: 16, left: '100%', top: '50%', transform: 'translateY(-50%)' }}>
+        <svg width="50" height="16" viewBox="0 0 50 16">
+          <circle cx="3" cy="8" r="3" fill="#9ca3af" stroke="#fff" strokeWidth="2" />
+          <line x1="6" y1="8" x2="37" y2="8" stroke="#d1d5db" strokeWidth="1.5" />
+          <g transform="translate(36, 0)">
+            <rect x="1" y="1" width="10" height="10" stroke="#d1d5db" strokeWidth="1" rx="2" fill="#e5e7eb" />
+            <path d="M3 6h6M6 3v6" stroke="#6b7280" strokeWidth="1" strokeLinecap="round" />
+          </g>
+        </svg>
       </Handle>
     </div>
   );
@@ -131,9 +154,10 @@ const ApiFlowDesignerInner: React.FC = () => {
 
   const onConnect = useCallback(
     (conn: Connection) => setEdges(eds => addEdge({
-      ...conn, type: 'smoothstep',
-      style: { stroke: '#9ca3af', strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: '#9ca3af', width: 16, height: 16 },
+      ...conn, type: 'plus',
+      style: { stroke: '#3b82f6', strokeWidth: 2 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6', width: 16, height: 16 },
+      markerStart: { type: 'arrowclosed', color: '#9ca3af', width: 0.001, height: 0.001 },
     }, eds) as Edge[]),
     [setEdges]
   );
@@ -142,26 +166,26 @@ const ApiFlowDesignerInner: React.FC = () => {
     const id = `${nodeDef.type}_${Date.now()}`;
     const newNode: Node = {
       id, type: 'workflow',
-      position: { x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 },
+      position: { x: 300 + nodes.length * 200, y: 200 },
       data: { ...nodeDef, role },
     };
-    setNodes(nds => {
-      const updated = [...nds, newNode];
-      // Auto-connect from last node
-      if (lastNodeId && role !== 'trigger') {
-        setEdges(eds => [...eds, {
-          id: `${lastNodeId}->${id}`,
-          source: lastNodeId, target: id,
-          type: 'smoothstep',
-          style: { stroke: '#9ca3af', strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#9ca3af', width: 16, height: 16 },
-        }]);
-      }
-      return updated;
-    });
+    const prev = lastNodeId;
+    setNodes(nds => [...nds, newNode]);
+    if (prev && role !== 'trigger') {
+      const newEdge: Edge = {
+        id: `${prev}->${id}`,
+        source: prev, target: id,
+        sourceHandle: 'output', targetHandle: 'input',
+        type: 'plus',
+        style: { stroke: '#3b82f6', strokeWidth: 2 },
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6', width: 16, height: 16 },
+      };
+      setEdges(eds => [...eds, newEdge]);
+    }
     setLastNodeId(id);
     setNodeCreatorOpen(false);
-  }, [lastNodeId, setNodes, setEdges]);
+  }, [lastNodeId, nodes.length, setNodes, setEdges]);
 
   const handleNodeClick = useCallback((_: any, node: Node) => {
     setLastNodeId(node.id);
@@ -186,9 +210,10 @@ const ApiFlowDesignerInner: React.FC = () => {
           setEdges(eds => [...eds, {
             id: `${lastNodeId}->${id}`,
             source: lastNodeId, target: id,
-            type: 'smoothstep',
-            style: { stroke: '#9ca3af', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#9ca3af', width: 16, height: 16 },
+            sourceHandle: 'output', targetHandle: 'input',
+            type: 'default',
+            style: { stroke: '#3b82f6', strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6', width: 16, height: 16 },
           }]);
         }
         return updated;
@@ -236,8 +261,8 @@ const ApiFlowDesignerInner: React.FC = () => {
             nodes={nodes} edges={edges}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
             onConnect={onConnect} onNodeClick={handleNodeClick}
-            nodeTypes={nodeTypes as any} fitView deleteKeyCode={['Backspace', 'Delete']}
-            defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: '#9ca3af', strokeWidth: 2 } }}
+            nodeTypes={nodeTypes as any} edgeTypes={edgeTypes as any} fitView deleteKeyCode={['Backspace', 'Delete']}
+            defaultEdgeOptions={{ type: 'plus', style: { stroke: '#3b82f6', strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6', width: 16, height: 16 } }}
           >
             <Background color="#e5e7eb" gap={20} />
             <Controls />
