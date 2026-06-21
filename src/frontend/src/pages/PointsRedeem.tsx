@@ -23,7 +23,7 @@ const PointsRedeem: React.FC = () => {
   };
 
   return (
-    <Card title={<span><ThunderboltOutlined /> 积分核销（FIFO 引擎）</span>} style={{ maxWidth: 600 }}>
+    <Card title={<span><ThunderboltOutlined /> 积分核销（FIFO 引擎）</span>} style={{ maxWidth: '100%' }}>
       <Alert message="FIFO 先进先出：先过期先消耗。生成 RedemptionAllocation 分摊明细。" type="info" showIcon style={{ marginBottom: 16 }} />
       <Form form={form} layout="vertical" onFinish={handleRedeem} initialValues={{ account_type: 'REWARD_POINTS' }}>
         <Form.Item name="member_id" label="会员 ID" rules={[{ required: true }]}><InputNumber style={{ width: 200 }} /></Form.Item>

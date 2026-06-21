@@ -140,7 +140,7 @@ const ProgramEdit: React.FC = () => {
       key: 'basic',
       label: '基础信息',
       children: (
-        <div style={{ maxWidth: 500 }}>
+        <div style={{  }}>
           <Form.Item name="programCode" label="俱乐部代码" rules={[{ required: true, message: '请输入' }]}>
             <Input disabled={isEdit} placeholder="如 BRAND-A" />
           </Form.Item>

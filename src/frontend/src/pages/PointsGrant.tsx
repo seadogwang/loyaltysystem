@@ -1,50 +1,89 @@
-import React, { useState } from 'react';
-import { Card, Form, Input, InputNumber, Select, Button, message, Alert, Descriptions } from 'antd';
-import { DollarOutlined, SendOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Card, Table, Input, Button, Switch, message, Spin } from 'antd';
+import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import { useAppStore } from '../store';
 import api from '../api';
+
+interface PointTypeItem {
+  typeCode: string;
+  name: string;
+  redeemable: boolean;
+  tierRelevant: boolean;
+  transferable: boolean;
+  allowNegative: boolean;
+}
 
 const PointsGrant: React.FC = () => {
   const PROG = useAppStore(s => s.currentProgramCode);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+  const [pointTypes, setPointTypes] = useState<PointTypeItem[]>([
+    { typeCode: 'REWARD_POINTS', name: '消费积分', redeemable: true, tierRelevant: true, transferable: false, allowNegative: false },
+    { typeCode: 'TIER_POINTS', name: '等级成长值', redeemable: false, tierRelevant: true, transferable: false, allowNegative: false },
+  ]);
 
-  const handleGrant = async (values: any) => {
+  useEffect(() => {
     setLoading(true);
-    try {
-      const { data } = await api.post('/admin/points/grant', {
-        member_id: values.member_id,
-        account_type: values.account_type,
-        points: values.points,
-        rule_code: values.rule_code || 'MANUAL_GRANT',
-      }, { headers: { 'X-Idempotency-Key': `grant-${Date.now()}` } });
-      if (data.code === 'SUCCESS') {
-        message.success(`成功发放 ${values.points} 积分`);
-        setResult(data.data);
-      } else {
-        message.error(data.message);
-      }
-    } catch (e: any) { message.error(e.response?.data?.message || '发放失败'); }
-    finally { setLoading(false); }
+    api.get(`/admin/programs/${PROG}`)
+      .then(({ data }) => {
+        const p = data?.data;
+        if (p?.pointTypes) setPointTypes(p.pointTypes);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [PROG]);
+
+  const updatePointType = (idx: number, field: string, value: any) => {
+    setPointTypes(prev => prev.map((pt, i) => i === idx ? { ...pt, [field]: value } : pt));
   };
 
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/admin/programs/${PROG}`, { pointTypes });
+      message.success('积分类型已保存');
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const columns = [
+    { title: '类型编码', dataIndex: 'typeCode', width: 160, render: (v: string, _: any, idx: number) => <Input size="small" value={v} onChange={e => updatePointType(idx, 'typeCode', e.target.value)} /> },
+    { title: '名称', dataIndex: 'name', width: 140, render: (v: string, _: any, idx: number) => <Input size="small" value={v} onChange={e => updatePointType(idx, 'name', e.target.value)} /> },
+    { title: '可兑换', dataIndex: 'redeemable', width: 80, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'redeemable', c)} /> },
+    { title: '算等级', dataIndex: 'tierRelevant', width: 80, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'tierRelevant', c)} /> },
+    { title: '可转赠', dataIndex: 'transferable', width: 80, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'transferable', c)} /> },
+    { title: '允许负数', dataIndex: 'allowNegative', width: 90, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'allowNegative', c)} /> },
+    {
+      title: '操作', width: 60,
+      render: (_: any, __: any, idx: number) => (
+        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setPointTypes(prev => prev.filter((_, i) => i !== idx))} />
+      ),
+    },
+  ];
+
   return (
-    <Card title={<span><DollarOutlined /> 积分发放（瀑布流冲抵引擎）</span>} style={{ maxWidth: 600 }}>
-      <Alert message="发分先补透支天窗，再还信用欠款，最后剩余积分入账 ACCRUAL" type="info" showIcon style={{ marginBottom: 16 }} />
-      <Form form={form} layout="vertical" onFinish={handleGrant} initialValues={{ account_type: 'REWARD_POINTS' }}>
-        <Form.Item name="member_id" label="会员 ID" rules={[{ required: true }]}><InputNumber style={{ width: 200 }} placeholder="8821" /></Form.Item>
-        <Form.Item name="account_type" label="账户类型"><Select options={[{ label: '消费积分', value: 'REWARD_POINTS' }, { label: '等级成长值', value: 'TIER_POINTS' }]} /></Form.Item>
-        <Form.Item name="points" label="发放积分" rules={[{ required: true }]}><InputNumber style={{ width: 200 }} min={0.0001} step={10} precision={4} /></Form.Item>
-        <Form.Item name="rule_code" label="规则代码"><Input placeholder="MANUAL_GRANT" /></Form.Item>
-        <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={loading}>发放积分</Button>
-      </Form>
-      {result && <Descriptions size="small" bordered style={{ marginTop: 16 }} column={1}>
-        <Descriptions.Item label="总发放">{result.total_granted}</Descriptions.Item>
-        <Descriptions.Item label="冲透支">{result.overdraft_repaid || 0}</Descriptions.Item>
-        <Descriptions.Item label="还信用">{result.credit_repaid || 0}</Descriptions.Item>
-        <Descriptions.Item label="净入账">{result.net_accrued || 0}</Descriptions.Item>
-      </Descriptions>}
+    <Card
+      title="积分类型字典"
+      extra={<Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>保存</Button>}
+      style={{ maxWidth: '100%' }}
+    >
+      {loading ? <Spin /> : (
+        <Table
+          dataSource={pointTypes}
+          columns={columns}
+          rowKey="typeCode"
+          pagination={false}
+          size="small"
+          footer={() => (
+            <Button size="small" type="dashed" icon={<PlusOutlined />} block onClick={() => setPointTypes(prev => [...prev, { typeCode: '', name: '', redeemable: false, tierRelevant: false, transferable: false, allowNegative: false }])}>
+              添加积分类型
+            </Button>
+          )}
+        />
+      )}
     </Card>
   );
 };

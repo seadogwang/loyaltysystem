@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { ConfigProvider, Layout, Menu, Typography, Badge, Avatar, Dropdown, Select, Space, Tag, Alert, theme } from 'antd';
 import {
-  PartitionOutlined, BuildOutlined, TeamOutlined,
+  BuildOutlined, TeamOutlined,
   DollarOutlined, CrownOutlined, ApiOutlined,
   CodeOutlined, AuditOutlined, BellOutlined,
   SettingOutlined, UserOutlined, LogoutOutlined, ApartmentOutlined,
@@ -40,12 +40,11 @@ const menuItems: MenuItemType[] = [
   {
     key: 'settings', icon: <SettingOutlined />, label: '设置',
     children: [
-              { key: 'chartdb', icon: <PartitionOutlined />, label: 'ChartDB建模', path: '/chartdb' },
-              { key: 'entity-modeling', icon: <PartitionOutlined />, label: '实体建模', path: '/entity-modeling' },
-              { key: 'entity-list', icon: <BuildOutlined />, label: '实体列表', path: '/entity-list' },
-              { key: 'entity-mapping', icon: <ApiOutlined />, label: 'API实体', path: '/entity-mapping' },
+              { key: 'program-edit', icon: <SettingOutlined />, label: '俱乐部设置', path: '/programs/PROG001/edit' },
               { key: 'schema-editor', icon: <BuildOutlined />, label: 'Schema 编辑器', path: '/schema-editor' },
-              { key: 'mapping-config', icon: <ApiOutlined />, label: '映射配置器', path: '/mapping-config' },
+              { key: 'chartdb', icon: <ApartmentOutlined />, label: 'ChartDB', path: '/chartdb' },
+              { key: 'api-flow', icon: <ApiOutlined />, label: 'API 流程设计', path: '/api-flow' },
+              { key: 'api-config', icon: <ApiOutlined />, label: 'API 配置', path: '/api-config' },
       { key: 'points-grant', icon: <DollarOutlined />, label: '积分类型', path: '/points/grant' },
       { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers' },
       { key: 'channel-list', icon: <ApiOutlined />, label: '渠道列表', path: '/channels' },
@@ -99,6 +98,10 @@ const AppShell: React.FC = () => {
   }, [setOnline]);
 
   const handleMenuClick = (info: { key: string }) => {
+    if (info.key === 'program-edit') {
+      navigate(`/programs/${currentProgramCode}/edit`);
+      return;
+    }
     const findPath = (key: string, items: MenuItemType[]): string | null => {
       for (const item of items) {
         if (item.key === key) return item.path || null;
@@ -241,7 +244,16 @@ const AppShell: React.FC = () => {
           {!online && (
             <Alert type="warning" message="网络连接已断开，正在重连..." banner style={{ borderRadius: 0 }} />
           )}
-          <Content style={{ padding: 24, minHeight: 'calc(100vh - 56px - 32px)', maxWidth: 1400, margin: '0 auto', width: '100%', background: '#fff' }}>
+          <Content style={{
+            padding: 24,
+            minHeight: 'calc(100vh - 56px - 32px)',
+            height: 'auto',
+            width: '100%',
+            background: '#fff',
+            display: 'block',
+            flexDirection: 'column',
+            overflow: 'visible',
+          }}>
             <Outlet />
           </Content>
           <Footer style={{

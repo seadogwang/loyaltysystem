@@ -33,12 +33,11 @@ const ChannelList = lazy(() => import('../pages/ChannelList'));
 const MappingEditor = lazy(() => import('../pages/MappingEditor'));
 const ScriptingWorkbench = lazy(() => import('../components/ScriptingWorkbench/ScriptingWorkbench'));
 const SchemaEditor = lazy(() => import('../pages/SchemaEditor'));
-const EntityList = lazy(() => import('../pages/EntityList'));
-const EntityMapping = lazy(() => import('../pages/EntityMapping'));
-const EntityModeling = lazy(() => import('../pages/EntityModeling'));
-const ChartDBEmbed = lazy(() => import('../pages/ChartDBEmbed'));
-const MappingConfig = lazy(() => import('../pages/MappingConfig'));
+const ChartDBPage = lazy(() => import('../pages/ChartDBPage'));
+const ApiFlowDesigner = lazy(() => import('../pages/ApiFlowDesigner'));
 const DynamicRenderer = lazy(() => import('../components/DynamicRenderer/DynamicRenderer'));
+const ApiConfig = lazy(() => import('../pages/ApiConfig'));
+const ApiMappingConfig = lazy(() => import('../pages/ApiMappingConfig'));
 const RedemptionCancellation = lazy(() => import('../components/RedemptionCancellation'));
 const EventInbox = lazy(() => import('../pages/EventInbox'));
 const NotificationPage = lazy(() => import('../pages/NotificationPage'));
@@ -84,12 +83,6 @@ export const router = createBrowserRouter([
     element: <SuspenseWrapper><Onboarding /></SuspenseWrapper>,
   },
 
-  // ChartDB 嵌入（独立全宽页面）
-  {
-    path: '/chartdb',
-    element: <SuspenseWrapper><ChartDBEmbed /></SuspenseWrapper>,
-  },
-
   // ====== 主应用（AppShell 布局 — 完成基础设置后才使用） ======
   {
     path: '/',
@@ -117,26 +110,22 @@ export const router = createBrowserRouter([
         element: <SuspenseWrapper><AuthGuard><ProgramEdit /></AuthGuard></SuspenseWrapper>,
       },
 
-      // 数据建模
-      {
-        path: 'entity-modeling',
-        element: <SuspenseWrapper><AuthGuard><EntityModeling /></AuthGuard></SuspenseWrapper>,
-      },
-      {
-        path: 'entity-list',
-        element: <SuspenseWrapper><AuthGuard><EntityList /></AuthGuard></SuspenseWrapper>,
-      },
-      {
-        path: 'entity-mapping',
-        element: <SuspenseWrapper><AuthGuard><EntityMapping /></AuthGuard></SuspenseWrapper>,
-      },
+      // Schema 编辑器
       {
         path: 'schema-editor',
         element: <SuspenseWrapper><AuthGuard><SchemaEditor /></AuthGuard></SuspenseWrapper>,
       },
+
+      // ChartDB
       {
-        path: 'mapping-config',
-        element: <SuspenseWrapper><AuthGuard><MappingConfig /></AuthGuard></SuspenseWrapper>,
+        path: 'chartdb',
+        element: <SuspenseWrapper><AuthGuard><ChartDBPage /></AuthGuard></SuspenseWrapper>,
+      },
+
+      // API 流程设计器
+      {
+        path: 'api-flow',
+        element: <SuspenseWrapper><AuthGuard><ApiFlowDesigner /></AuthGuard></SuspenseWrapper>,
       },
 
       // 会员中心
@@ -199,6 +188,16 @@ export const router = createBrowserRouter([
       {
         path: 'flow-designer',
         element: <SuspenseWrapper><AuthGuard><FlowDesigner /></AuthGuard></SuspenseWrapper>,
+      },
+
+      // API 配置管理
+      {
+        path: 'api-config',
+        element: <SuspenseWrapper><AuthGuard><ApiConfig /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'api-config/:id/mapping',
+        element: <SuspenseWrapper><AuthGuard><ApiMappingConfig /></AuthGuard></SuspenseWrapper>,
       },
 
       // 渠道集成
