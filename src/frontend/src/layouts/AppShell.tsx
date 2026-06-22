@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { ConfigProvider, Layout, Menu, Typography, Badge, Avatar, Dropdown, Select, Space, Tag, Alert, theme } from 'antd';
 import {
-  BuildOutlined, TeamOutlined,
+  TeamOutlined,
   DollarOutlined, CrownOutlined, ApiOutlined,
   CodeOutlined, AuditOutlined, BellOutlined,
   SettingOutlined, UserOutlined, LogoutOutlined, ApartmentOutlined,
-  SafetyCertificateOutlined, FileTextOutlined, WarningOutlined,
+  SafetyCertificateOutlined, FileTextOutlined, WarningOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '../store';
 
@@ -34,17 +34,13 @@ const menuItems: MenuItemType[] = [
     key: 'tier-rule', icon: <CrownOutlined />, label: '规则引擎',
     children: [
       { key: 'rule-list', icon: <SettingOutlined />, label: '规则列表', path: '/rules' },
+      { key: 'rule-ai', icon: <RobotOutlined />, label: 'AI 规则助手', path: '/rules/ai' },
       { key: 'flow-designer', icon: <ApartmentOutlined />, label: '流程设计器', path: '/flow-designer' },
     ],
   },
   {
     key: 'settings', icon: <SettingOutlined />, label: '设置',
     children: [
-              { key: 'program-edit', icon: <SettingOutlined />, label: '俱乐部设置', path: '/programs/PROG001/edit' },
-              { key: 'schema-editor', icon: <BuildOutlined />, label: 'Schema 编辑器', path: '/schema-editor' },
-              { key: 'chartdb', icon: <ApartmentOutlined />, label: 'ChartDB', path: '/chartdb' },
-              { key: 'api-flow', icon: <ApiOutlined />, label: 'API 流程设计', path: '/api-flow' },
-              { key: 'api-config', icon: <ApiOutlined />, label: 'API 配置', path: '/api-config' },
       { key: 'points-grant', icon: <DollarOutlined />, label: '积分类型', path: '/points/grant' },
       { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers' },
       { key: 'channel-list', icon: <ApiOutlined />, label: '渠道列表', path: '/channels' },
@@ -53,6 +49,7 @@ const menuItems: MenuItemType[] = [
       { key: 'logs', icon: <FileTextOutlined />, label: '操作日志', path: '/system/logs' },
       { key: 'spi-logs', icon: <AuditOutlined />, label: 'SPI 日志', path: '/system/spi-logs' },
       { key: 'audit', icon: <WarningOutlined />, label: '租户审计', path: '/system/audit' },
+      { key: 'llm-config', icon: <RobotOutlined />, label: '大模型配置', path: '/system/llm-config' },
     ],
   },
 ];
@@ -98,10 +95,6 @@ const AppShell: React.FC = () => {
   }, [setOnline]);
 
   const handleMenuClick = (info: { key: string }) => {
-    if (info.key === 'program-edit') {
-      navigate(`/programs/${currentProgramCode}/edit`);
-      return;
-    }
     const findPath = (key: string, items: MenuItemType[]): string | null => {
       for (const item of items) {
         if (item.key === key) return item.path || null;
