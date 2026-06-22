@@ -146,9 +146,13 @@ src/main/java/com/loyalty/platform/
 |-------------------|---------------------|
 | ![Rule Config](规则配置.png) | ![Rule Engine](规则引擎更新.png) |
 
-| Member Service | Sandbox Test |
-|---------------|--------------|
-| ![Member](会员服务.png) | ![Sandbox](规则管理.-发布前的沙箱测试.png) |
+| AI Rule Assistant | AI Assistant Form |
+|-------------------|-------------------|
+| ![AI Assistant](AI辅助规则配置.png) | ![AI Form](AI辅助规则配置_1.png) |
+
+| AI Rule Preview | Member Service |
+|-----------------|---------------|
+| ![AI Preview](AI辅助规则配置_2.png) | ![Member](会员服务.png) |
 
 ---
 
