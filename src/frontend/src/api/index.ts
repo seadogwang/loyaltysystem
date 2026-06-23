@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ApiResponse, JsonSchema, TransformTestRequest, TransformTestResult, MemberData, SchemaVersionInfo } from '../types';
+import type { ApiResponse, JsonSchema, TransformTestRequest, TransformTestResult, MemberData, SchemaVersionInfo } from '../types/index';
 
 const api = axios.create({
   baseURL: '/api',

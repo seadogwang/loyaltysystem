@@ -4,6 +4,11 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.loyalty.platform.common.context.TenantContext;
 import com.loyalty.platform.domain.entity.ChannelAdapterConfig;
 import com.loyalty.platform.domain.repository.ChannelAdapterConfigRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,29 +26,14 @@ import java.util.concurrent.*;
 
 /**
  * 统一 SPI 网关控制器。
- *
- * <p>向所有第三方开放平台提供单一的标准化 Webhook 路径：
- * <pre>POST /api/open/spi/{channel}/{programCode}/{action}</pre>
- *
- * <p><b>防雪崩机制</b>：
- * <ul>
- *   <li>异步处理 + 2000ms 超时隔离（CompletableFuture）</li>
- *   <li>超时不返回 HTTP 500，返回 HTTP 200 + 渠道特定错误码</li>
- *   <li>业务异常同样返回 HTTP 200（符合天猫/京东 SPI 规约）</li>
- * </ul>
- *
- * <p><b>请求/响应全量审计</b>：通过 {@link SpiLogService} 记录所有调用。
- *
- * @author Loyalty SaaS Architecture Team
- * @since 1.0.0
  */
+@Tag(name = "SPI Gateway", description = "外部渠道接入 — 统一 Webhook 入口（天猫/京东/抖音/微信小程序）")
 @RestController
 @RequestMapping("/api/open/spi/{channel}/{programCode}")
 public class SpiGatewayController {
 
     private static final Logger log = LoggerFactory.getLogger(SpiGatewayController.class);
 
-    /** SPI 请求体最大大小：1MB，防止 OOM */
     private static final int MAX_BODY_SIZE = 1_048_576; // 1MB
     private ExecutorService spiThreadPool;
 
@@ -65,7 +55,7 @@ public class SpiGatewayController {
                 4, 16, 60L, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(200),
                 new ThreadFactoryBuilder().setNameFormat("spi-worker-%d").setDaemon(true).build(),
-                new ThreadPoolExecutor.CallerRunsPolicy() // 队列满时回退到调用者线程
+                new ThreadPoolExecutor.CallerRunsPolicy()
         );
         log.info("[SpiGateway] SPI 线程池已初始化: core=4, max=16, queue=200");
     }
@@ -78,31 +68,26 @@ public class SpiGatewayController {
         }
     }
 
-    /**
-     * 统一 SPI Webhook 入口。
-     *
-     * @param channel     渠道标识（TMALL, JD, DOUYIN, WECHAT_MINI）
-     * @param programCode 租户计划代码
-     * @param action      操作类型（如 order.paid, member.enroll, refund.notify）
-     * @param request     HTTP 原始请求
-     * @return HTTP 200 + 渠道特定 JSON（即使处理失败也返回 200）
-     */
+    @Operation(summary = "统一 SPI Webhook", description = "接收外部渠道（天猫/京东/抖音/微信小程序）的订单、会员、退款等事件通知。异步处理 + 2000ms 超时隔离，失败也返回 HTTP 200")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "请求已接收（含业务失败）"),
+        @ApiResponse(responseCode = "401", description = "签名验证失败"),
+        @ApiResponse(responseCode = "404", description = "渠道配置不存在")
+    })
     @PostMapping("/{action}")
     public ResponseEntity<Object> handleSpi(
-            @PathVariable String channel,
-            @PathVariable String programCode,
-            @PathVariable String action,
+            @Parameter(description = "渠道标识（TMALL/JD/DOUYIN/WECHAT_MINI）") @PathVariable String channel,
+            @Parameter(description = "租户代码") @PathVariable String programCode,
+            @Parameter(description = "操作类型（order.paid / member.enroll / refund.notify 等）") @PathVariable String action,
             HttpServletRequest request) {
 
         long startTime = System.currentTimeMillis();
         String requestId = request.getHeader("X-Request-Id");
         byte[] rawBody = readBody(request);
 
-        // 设置租户上下文
         TenantContext.set(programCode);
 
         try {
-            // 1. 获取渠道处理器和配置
             ChannelSpiHandler handler = handlerFactory.getHandler(channel);
 
             var configOpt = configRepo.findActiveByProgramAndChannel(programCode, channel);
@@ -114,7 +99,6 @@ public class SpiGatewayController {
             }
             ChannelAdapterConfig config = configOpt.get();
 
-            // 2. 安全验签拦截
             if (!handler.verifySignature(request, rawBody, config)) {
                 spiLogService.logFailed(channel, programCode, action, requestId,
                         "SIGN_FAILED", new String(rawBody), "签名验证失败");
@@ -122,7 +106,6 @@ public class SpiGatewayController {
                         .body(Map.of("code", "ERR_SIGN_FAILED", "message", "Signature Invalid"));
             }
 
-            // 3. 防雪崩隔离：异步处理 + 2000ms 超时（捕获 effectively final 变量）
             final ChannelSpiHandler finalHandler = handler;
             final ChannelAdapterConfig finalConfig = config;
             CompletableFuture<Object> future = CompletableFuture.supplyAsync(() -> {
@@ -165,14 +148,12 @@ public class SpiGatewayController {
         } catch (Exception e) {
             spiLogService.logFailed(channel, programCode, action, requestId,
                     "INIT_ERROR", new String(rawBody), e.getMessage());
-            // 无法确定 handler 时返回通用错误
             return ResponseEntity.ok(Map.of("code", "ERR_INIT_FAILED", "message", e.getMessage()));
         } finally {
             TenantContext.clear();
         }
     }
 
-    /** 安全读取请求体为字节数组，超过 MAX_BODY_SIZE 时截断并告警 */
     private byte[] readBody(HttpServletRequest request) {
         try (InputStream is = request.getInputStream();
              ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
@@ -184,7 +165,6 @@ public class SpiGatewayController {
                 if (total > MAX_BODY_SIZE) {
                     log.warn("[SpiGateway] 请求体超过大小限制 {} bytes，已截断: uri={}",
                             MAX_BODY_SIZE, request.getRequestURI());
-                    // 写入截至 MAX_BODY_SIZE 的剩余字节后截断
                     int allowed = len - (total - MAX_BODY_SIZE);
                     if (allowed > 0) {
                         bos.write(buf, 0, allowed);

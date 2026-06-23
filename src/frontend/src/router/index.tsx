@@ -45,6 +45,8 @@ const RoleManage = lazy(() => import('../pages/RoleManage'));
 const OperationLogs = lazy(() => import('../pages/OperationLogs'));
 const SpiLogs = lazy(() => import('../pages/SpiLogs'));
 const TenantAudit = lazy(() => import('../pages/TenantAudit'));
+const AIRuleAssistant = lazy(() => import('../pages/AIRuleAssistant'));
+const LlmConfig = lazy(() => import('../pages/LlmConfig'));
 
 // ==================== 加载占位 ====================
 
@@ -186,6 +188,10 @@ export const router = createBrowserRouter([
         element: <SuspenseWrapper><AuthGuard><SandboxTest /></AuthGuard></SuspenseWrapper>,
       },
       {
+        path: 'rules/ai',
+        element: <SuspenseWrapper><AuthGuard><AIRuleAssistant /></AuthGuard></SuspenseWrapper>,
+      },
+      {
         path: 'flow-designer',
         element: <SuspenseWrapper><AuthGuard><FlowDesigner /></AuthGuard></SuspenseWrapper>,
       },
@@ -229,6 +235,10 @@ export const router = createBrowserRouter([
       },
 
       // 系统设置
+      {
+        path: 'system/llm-config',
+        element: <SuspenseWrapper><AuthGuard><LlmConfig /></AuthGuard></SuspenseWrapper>,
+      },
       {
         path: 'system/roles',
         element: <SuspenseWrapper><AuthGuard><RoleManage /></AuthGuard></SuspenseWrapper>,

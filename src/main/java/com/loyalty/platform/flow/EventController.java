@@ -4,6 +4,9 @@ import com.loyalty.platform.common.dto.ApiResponse;
 import com.loyalty.platform.common.context.TenantContext;
 import com.yomahub.liteflow.core.FlowExecutor;
 import com.yomahub.liteflow.flow.LiteflowResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +18,7 @@ import java.util.Map;
 /**
  * 事件处理流程控制器 — 通过 LiteFlow FlowExecutor 执行组件链。
  */
+@Tag(name = "Flow Execution", description = "LiteFlow 流程执行 — 事件处理链触发与测试运行")
 @RestController
 @RequestMapping("/api/events")
 public class EventController {
@@ -27,14 +31,12 @@ public class EventController {
         this.flowExecutor = flowExecutor;
     }
 
-    /**
-     * 处理事件 — 通过 LiteFlow 链执行。
-     */
+    @Operation(summary = "执行事件流程", description = "通过 LiteFlow 链执行事件处理流程")
     @PostMapping("/{chainName}/{programCode}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> processEvent(
-            @PathVariable String chainName,
-            @PathVariable String programCode,
-            @RequestBody String body) {
+            @Parameter(description = "流程链名称（如 ORDER_CHAIN）") @PathVariable String chainName,
+            @Parameter(description = "租户代码") @PathVariable String programCode,
+            @Parameter(description = "原始 JSON payload") @RequestBody String body) {
 
         TenantContext.set(programCode);
 
@@ -45,7 +47,6 @@ public class EventController {
             ctx.setRawPayload(body);
             ctx.setIdempotencyKey(generateIdempotencyKey(chainName, programCode, body));
 
-            // LiteFlow 2.12.4: 通过 execute2Resp 传递 context bean
             LiteflowResponse response = flowExecutor.execute2Resp(chainName, null, ctx);
 
             Map<String, Object> result = new LinkedHashMap<>();
@@ -73,9 +74,7 @@ public class EventController {
         }
     }
 
-    /**
-     * 测试执行 — 用于流程设计器的测试功能。
-     */
+    @Operation(summary = "测试运行", description = "用于流程设计器的测试功能")
     @PostMapping("/test-run")
     public ResponseEntity<ApiResponse<Map<String, Object>>> testRun(
             @RequestBody Map<String, Object> body) {

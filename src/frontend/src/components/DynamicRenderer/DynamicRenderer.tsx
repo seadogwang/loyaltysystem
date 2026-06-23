@@ -7,7 +7,7 @@ import {
 } from '@formily/antd-v5';
 import { Button, Card, Tag, Alert, Collapse, Space, Spin, Empty, Badge, message } from 'antd';
 import { ExclamationCircleOutlined, EditOutlined, EyeOutlined, HistoryOutlined } from '@ant-design/icons';
-import type { JsonSchema, FieldSchema, MemberData, RenderMode } from '../../types';
+import type { JsonSchema, FieldSchema, MemberData, RenderMode } from '../../types/index';
 import { getSchema, getMember, updateMember, checkFieldDeprecation } from '../../api';
 
 // ==================== Formily 组件注册 ====================

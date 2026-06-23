@@ -1,14 +1,15 @@
 package com.loyalty.platform.flow.components;
 
 import com.loyalty.platform.domain.entity.Member;
+import com.loyalty.platform.domain.entity.MemberAccount;
 import com.loyalty.platform.flow.BaseLiteflowComponent;
 import com.loyalty.platform.flow.EventContext;
-import com.loyalty.platform.member.OneIdEnrollmentService;
 import com.loyalty.platform.rules.drl.MemberFact;
 import com.yomahub.liteflow.annotation.LiteflowComponent;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 /**
@@ -47,17 +48,41 @@ public class OneIdComponent extends BaseLiteflowComponent {
                         Member.class)
                         .setParameter("pc", pc).setParameter("mid", memberId)
                         .getSingleResult();
+
+                // 获取累计消费金额(TIER账户余额作为等级成长值)
+                Double totalSpent = 0.0;
+                Double tierPoints = 0.0;
+                try {
+                    var tierAcc = em.createQuery(
+                        "SELECT a FROM MemberAccount a WHERE a.programCode=:pc AND a.memberId=:mid AND a.accountType='TIER'",
+                        MemberAccount.class)
+                        .setParameter("pc", pc).setParameter("mid", memberId)
+                        .getResultList();
+                    if (!tierAcc.isEmpty()) {
+                        tierPoints = tierAcc.get(0).getTotalAccrued().doubleValue();
+                    }
+                    var rewardAcc = em.createQuery(
+                        "SELECT a FROM MemberAccount a WHERE a.programCode=:pc AND a.memberId=:mid AND a.accountType='REWARD'",
+                        MemberAccount.class)
+                        .setParameter("pc", pc).setParameter("mid", memberId)
+                        .getResultList();
+                    if (!rewardAcc.isEmpty()) {
+                        totalSpent = rewardAcc.get(0).getTotalAccrued().doubleValue();
+                    }
+                } catch (Exception ignored) {}
+
                 memberFact = new MemberFact(pc, member.getMemberId(), member.getTierCode(),
-                        member.getStatus(), member.getExtAttributes());
-                log.debug("[OneId] 会员已存在: memberId={}, tier={}", memberId, member.getTierCode());
+                        member.getStatus(), member.getExtAttributes(), totalSpent, tierPoints);
+                log.debug("[OneId] 会员已存在: memberId={}, tier={}, totalSpent={}, tierPoints={}",
+                        memberId, member.getTierCode(), totalSpent, tierPoints);
             } catch (Exception e) {
                 // 会员不存在时创建默认 MemberFact
-                memberFact = new MemberFact(pc, memberId, "BASE", "ENROLLED", payload);
+                memberFact = new MemberFact(pc, memberId, "BASE", "ENROLLED", payload, 0.0, 0.0);
                 log.info("[OneId] 会员不存在，使用默认值: memberId={}", memberId);
             }
         } else {
             // 无法提取 memberId，使用默认值
-            memberFact = new MemberFact(pc, 0L, "BASE", "UNKNOWN", payload);
+            memberFact = new MemberFact(pc, 0L, "BASE", "UNKNOWN", payload, 0.0, 0.0);
             log.warn("[OneId] 无法提取 memberId，使用默认");
         }
 

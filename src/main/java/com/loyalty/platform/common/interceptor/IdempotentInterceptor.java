@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyalty.platform.common.annotation.Idempotent;
 import com.loyalty.platform.common.context.TenantContext;
 import com.loyalty.platform.common.dto.ApiResponse;
+import com.loyalty.platform.common.exception.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -53,6 +54,20 @@ public class IdempotentInterceptor {
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
 
+    /**
+     * 幂等性检查切面逻辑。
+     *
+     * <p><b>行为变更 (v1.8)</b>: 缺失必填幂等键时，
+     * 原 {@code return ApiResponse.error(...)} 改为 {@code throw BusinessException}。
+     * {@link com.loyalty.platform.common.exception.GlobalExceptionHandler} 捕获后
+     * 仍返回 HTTP 200 + ApiResponse.error JSON，对前端行为不变，
+     * 但对直接调用 AOP advice 的单元测试需注意返回值类型从 ApiResponse 变为异常抛出。
+     *
+     * @param joinPoint   AOP 切点
+     * @param idempotent  @Idempotent 注解
+     * @return 业务方法返回值，或 Redis 缓存的结果
+     * @throws Throwable 业务方法异常或 BusinessException (缺失幂等键)
+     */
     @Around("@annotation(idempotent)")
     public Object checkIdempotency(ProceedingJoinPoint joinPoint, Idempotent idempotent) throws Throwable {
         // 获取当前 HTTP 请求
@@ -63,10 +78,10 @@ public class IdempotentInterceptor {
         HttpServletRequest request = attrs.getRequest();
         String idempotencyKey = request.getHeader("X-Idempotency-Key");
 
-        // 必须携带幂等键
+        // 必须携带幂等键 — 抛出 BusinessException 由 GlobalExceptionHandler 统一处理
         if (idempotent.required() && (idempotencyKey == null || idempotencyKey.isBlank())) {
             log.warn("[Idempotent] 请求缺失 X-Idempotency-Key: path={}", request.getRequestURI());
-            return ApiResponse.error("ERR_MISSING_IDEMPOTENCY_KEY", "请求头缺失 X-Idempotency-Key");
+            throw new BusinessException("ERR_MISSING_IDEMPOTENCY_KEY", "请求头缺失 X-Idempotency-Key");
         }
 
         // 非幂等请求直接放行

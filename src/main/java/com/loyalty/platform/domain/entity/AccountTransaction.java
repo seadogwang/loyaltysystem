@@ -60,7 +60,7 @@ public class AccountTransaction implements Serializable {
     @Column(name = "amount", nullable = false, precision = 18, scale = 4)
     private BigDecimal amount;
 
-    /** 剩余可用额度 */
+    /** 剩余可用额度 — JPA @PrePersist 保证非 null */
     @Column(name = "remaining_amount", precision = 18, scale = 4)
     private BigDecimal remainingAmount;
 
@@ -101,6 +101,16 @@ public class AccountTransaction implements Serializable {
     @Column(name = "operation_key", length = 200)
     private String operationKey;
 
+    /** 该笔流水是否可被冲抵（负债积分） */
+    @Column(name = "repayable")
+    @Builder.Default
+    private Boolean repayable = false;
+
+    /** 已冲抵金额 */
+    @Column(name = "repaid_amount", precision = 18, scale = 4)
+    @Builder.Default
+    private BigDecimal repaidAmount = BigDecimal.ZERO;
+
     /** 扩展属性 (JSONB) */
     @JdbcTypeCode(SqlTypes.JSON)
     @jakarta.persistence.Column(name = "ext_attributes", columnDefinition = "jsonb")
@@ -120,4 +130,14 @@ public class AccountTransaction implements Serializable {
 
     @Column(name = "pay_time")
     private LocalDateTime payTime;
+
+    /**
+     * JPA 生命周期回调 — 持久化前确保 remainingAmount 和 repaidAmount 非 null。
+     * 防止历史 DB 行（列值为 NULL）加载后造成 NPE。
+     */
+    @PrePersist
+    void ensureNonNullAmounts() {
+        if (remainingAmount == null) remainingAmount = BigDecimal.ZERO;
+        if (repaidAmount == null) repaidAmount = BigDecimal.ZERO;
+    }
 }

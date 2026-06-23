@@ -25,6 +25,7 @@
         <redisson.version>3.30.0</redisson.version>
         <guava.version>33.1.0-jre</guava.version>
         <jsqlparser.version>4.6</jsqlparser.version>
+        <springdoc.version>2.5.0</springdoc.version>
     </properties>
 
     <dependencies>
@@ -88,6 +89,13 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
+        </dependency>
+
+        <!-- Springdoc OpenAPI: 自动生成 API 文档 -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
 
         <!-- Jackson (已由 spring-boot-starter-web 引入，此处声明用于 JSONB 序列化) -->

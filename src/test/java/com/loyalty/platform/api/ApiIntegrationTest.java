@@ -1,11 +1,10 @@
 package com.loyalty.platform.api;
 
 import com.loyalty.platform.api.service.MemberService;
-import com.loyalty.platform.api.service.SchemaService;
+import com.loyalty.platform.api.service.ProgramSchemaService;
 import com.loyalty.platform.common.context.TenantContext;
 import com.loyalty.platform.domain.entity.Member;
 import com.loyalty.platform.domain.repository.MemberRepository;
-import com.loyalty.platform.domain.repository.SchemaVersionRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.*;
@@ -20,11 +19,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({SchemaService.class, MemberService.class})
+@Import({ProgramSchemaService.class, MemberService.class})
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ApiIntegrationTest {
 
-    @Autowired private SchemaService schemaService;
+    @Autowired private ProgramSchemaService schemaService;
     @Autowired private MemberService memberService;
     @Autowired private MemberRepository memberRepo;
     @PersistenceContext private EntityManager em;

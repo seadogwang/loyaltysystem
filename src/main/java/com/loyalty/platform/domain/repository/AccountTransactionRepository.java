@@ -88,4 +88,17 @@ public interface AccountTransactionRepository extends BaseRepository<AccountTran
     List<AccountTransaction> findTimelineAfter(@Param("pc") String programCode,
                                                @Param("mid") Long memberId,
                                                @Param("after") LocalDateTime after);
+
+    /**
+     * 查询可冲抵负债流水（FEFO：按过期时间从近到远）。
+     * 条件：repayable=true, status='ACTIVE', remainingAmount>0, 未过期
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+    @Query("SELECT t FROM AccountTransaction t WHERE t.programCode = :pc AND t.memberId = :mid "
+            + "AND t.repayable = true AND t.status = 'ACTIVE' AND t.remainingAmount > 0 "
+            + "AND (t.expiresAt IS NULL OR t.expiresAt > CURRENT_TIMESTAMP) "
+            + "ORDER BY t.expiresAt ASC NULLS LAST, t.createdAt ASC")
+    List<AccountTransaction> findRepayableForMember(@Param("pc") String programCode,
+                                                     @Param("mid") Long memberId);
 }

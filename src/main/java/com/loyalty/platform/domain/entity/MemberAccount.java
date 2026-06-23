@@ -55,6 +55,11 @@ public class MemberAccount {
     @Builder.Default
     private BigDecimal creditUsed = BigDecimal.ZERO;
 
+    /** 待冲抵负债总额（仅当 account_type 的 allow_repay=true 时有效） */
+    @Column(name = "pending_repay_amount", precision = 20, scale = 4)
+    @Builder.Default
+    private BigDecimal pendingRepayAmount = BigDecimal.ZERO;
+
     @Version
     @Column(name = "version", nullable = false)
     @Builder.Default

@@ -4,7 +4,14 @@ import com.loyalty.platform.accounting.PointGrantService;
 import com.loyalty.platform.activity.ActivityStateService;
 import com.loyalty.platform.activity.StepCycleCalculator;
 import com.loyalty.platform.common.exception.BusinessException;
+import com.loyalty.platform.common.util.ExpiryCalculator;
+import com.loyalty.platform.domain.entity.Member;
+import com.loyalty.platform.domain.entity.TierChangeLog;
+import com.loyalty.platform.domain.entity.TierDefinition;
+import com.loyalty.platform.domain.repository.MemberRepository;
 import com.loyalty.platform.rules.action.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -12,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -37,10 +45,16 @@ public class RewardExecutor {
 
     private final PointGrantService pointGrantService;
     private final ActivityStateService activityStateService;
+    private final MemberRepository memberRepo;
 
-    public RewardExecutor(PointGrantService pointGrantService, ActivityStateService activityStateService) {
+    @PersistenceContext
+    private EntityManager em;
+
+    public RewardExecutor(PointGrantService pointGrantService, ActivityStateService activityStateService,
+                          MemberRepository memberRepo) {
         this.pointGrantService = pointGrantService;
         this.activityStateService = activityStateService;
+        this.memberRepo = memberRepo;
     }
 
     /**
@@ -68,7 +82,7 @@ public class RewardExecutor {
                     if (finalPoints.compareTo(BigDecimal.ZERO) > 0) {
                         pointGrantService.grantPoints(
                                 award.getProgramCode(),
-                                Long.parseLong(award.getMemberId()),
+                                parseMemberId(award.getMemberId()),
                                 award.getAccountType(),
                                 finalPoints,
                                 award.getRuleId(),
@@ -101,6 +115,21 @@ public class RewardExecutor {
         }
 
         log.info("[RewardExecutor] 执行完成: member={}, executed={}/{}", memberId, executed, actions.size());
+    }
+
+    /**
+     * 安全解析 memberId 字符串为 Long — 提供清晰的错误信息而非隐式 NumberFormatException。
+     */
+    private Long parseMemberId(String memberId) {
+        if (memberId == null || memberId.isBlank()) {
+            throw new BusinessException("ERR_INVALID_MEMBER_ID", "memberId 为空，无法执行动作");
+        }
+        try {
+            return Long.parseLong(memberId);
+        } catch (NumberFormatException e) {
+            throw new BusinessException("ERR_INVALID_MEMBER_ID",
+                    "memberId 格式错误: '" + memberId + "' — 期望数字格式");
+        }
     }
 
     /**
@@ -156,12 +185,102 @@ public class RewardExecutor {
     }
 
     private void executeUpgradeTier(UpgradeTierAction upgrade) {
-        log.info("[RewardExecutor] 等级升级: member={}, tier={}", upgrade.getMemberId(), upgrade.getNewTier());
-        // 实际调用 TierEvaluationService.upgrade()
+        Long memberId = parseMemberId(upgrade.getMemberId());
+        String newTier = upgrade.getNewTier();
+        log.info("[RewardExecutor] 等级升级: member={}, tier={} → {}", memberId, upgrade.getMemberId(), newTier);
+
+        // 获取当前租户上下文
+        String pc = com.loyalty.platform.common.context.TenantContext.get();
+        if (pc == null) {
+            log.error("[RewardExecutor] 租户上下文缺失，无法执行等级升级");
+            return;
+        }
+
+        Member member = memberRepo.findByMemberId(pc, memberId)
+                .orElseThrow(() -> new BusinessException("ERR_MEMBER_NOT_FOUND",
+                        "Member not found: " + memberId));
+        String oldTier = member.getTierCode();
+
+        // 更新会员等级和有效期
+        LocalDateTime now = LocalDateTime.now();
+        member.setTierCode(newTier);
+        member.setTierEffectiveFrom(now);
+
+        // 从 tier_definition 读取等级有效期配置
+        String validityMode = "CALENDAR_YEARS";
+        int validityValue = 1;
+        try {
+            TierDefinition tierDef = em.createQuery(
+                "SELECT t FROM TierDefinition t WHERE t.programCode=:pc AND t.tierCode=:tc",
+                TierDefinition.class)
+                .setParameter("pc", pc).setParameter("tc", newTier)
+                .getSingleResult();
+            if (tierDef.getUpgradeCriteria() != null) {
+                if (tierDef.getUpgradeCriteria().get("validity_mode") instanceof String s) validityMode = s;
+                if (tierDef.getUpgradeCriteria().get("validity_value") instanceof Number n) validityValue = n.intValue();
+            }
+        } catch (Exception e) {
+            log.debug("[RewardExecutor] 无法读取等级有效期配置，使用默认值: {}", e.getMessage());
+        }
+        member.setTierExpiresAt(validityValue > 0 ? calculateTierExpiry(validityMode, validityValue) : null);
+        member.setUpdatedAt(now);
+        memberRepo.save(member);
+
+        // 写入等级变更日志
+        TierChangeLog tLog = new TierChangeLog();
+        tLog.setProgramCode(pc);
+        tLog.setMemberId(memberId);
+        tLog.setFromTier(oldTier);
+        tLog.setToTier(newTier);
+        tLog.setChangeReason(upgrade.getReason());
+        tLog.setChangedAt(now);
+        em.persist(tLog);
+
+        log.info("[RewardExecutor] 等级升级完成: member={}, {}→{}, expiresAt={}",
+                memberId, oldTier, newTier, member.getTierExpiresAt());
     }
 
     private void executeDowngradeTier(DowngradeTierAction downgrade) {
-        log.info("[RewardExecutor] 等级降级: member={}, tier={}", downgrade.getMemberId(), downgrade.getNewTier());
-        // 实际调用 TierEvaluationService.downgrade()
+        Long memberId = parseMemberId(downgrade.getMemberId());
+        String newTier = downgrade.getNewTier();
+        log.info("[RewardExecutor] 等级降级: member={}, tier={}", memberId, newTier);
+
+        String pc = com.loyalty.platform.common.context.TenantContext.get();
+        if (pc == null) {
+            log.error("[RewardExecutor] 租户上下文缺失，无法执行等级降级");
+            return;
+        }
+
+        Member member = memberRepo.findByMemberId(pc, memberId)
+                .orElseThrow(() -> new BusinessException("ERR_MEMBER_NOT_FOUND",
+                        "Member not found: " + memberId));
+        String oldTier = member.getTierCode();
+
+        // 更新会员等级，清除有效期
+        LocalDateTime now = LocalDateTime.now();
+        member.setTierCode(newTier);
+        member.setTierEffectiveFrom(null);
+        member.setTierExpiresAt(null);
+        member.setUpdatedAt(now);
+        memberRepo.save(member);
+
+        // 写入等级变更日志
+        TierChangeLog tLog = new TierChangeLog();
+        tLog.setProgramCode(pc);
+        tLog.setMemberId(memberId);
+        tLog.setFromTier(oldTier);
+        tLog.setToTier(newTier);
+        tLog.setChangeReason(downgrade.getReason());
+        tLog.setChangedAt(now);
+        em.persist(tLog);
+
+        log.info("[RewardExecutor] 等级降级完成: member={}, {}→{}", memberId, oldTier, newTier);
+    }
+
+    /**
+     * 计算等级过期时间 — 委托给 {@link ExpiryCalculator}，与积分过期使用同一算法。
+     */
+    private LocalDateTime calculateTierExpiry(String mode, int value) {
+        return ExpiryCalculator.calculateExpiry(LocalDateTime.now(), mode, value);
     }
 }

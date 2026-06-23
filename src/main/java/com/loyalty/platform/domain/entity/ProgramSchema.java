@@ -1,0 +1,81 @@
+package com.loyalty.platform.domain.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+
+@Entity
+@Table(name = "program_schema",
+        uniqueConstraints = {@UniqueConstraint(name = "program_schema_program_code_entity_type_key",
+                columnNames = {"program_code", "entity_type"})})
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class ProgramSchema {
+
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "program_code", nullable = false, length = 100)
+    private String programCode;
+
+    @Column(name = "entity_type", nullable = false, length = 100)
+    private String entityType;
+
+    @Column(name = "entity_category", length = 20)
+    @Builder.Default
+    private String entityCategory = "BUSINESS";
+
+    @Column(name = "version", length = 10)
+    @Builder.Default
+    private String version = "v1";
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "field_schema", nullable = false, columnDefinition = "jsonb")
+    private Map<String, Object> fieldSchema;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "api_config", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> apiConfig = Map.of();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "entity_relations", columnDefinition = "jsonb")
+    @Builder.Default
+    private Object entityRelations = Map.of();
+
+    @Column(name = "description", columnDefinition = "text")
+    private String description;
+
+    @Column(name = "status", length = 20)
+    @Builder.Default
+    private String status = "DRAFT";
+
+    @Column(name = "schema_code", length = 100)
+    private String schemaCode;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "impact_report", columnDefinition = "jsonb")
+    private Map<String, Object> impactReport;
+
+    @Column(name = "created_by")
+    private Long createdBy;
+
+    @Column(name = "created_at", updatable = false)
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "updated_at")
+    @Builder.Default
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
+
+    /** 获取版本标签: schema_code:v{version} */
+    public String getVersionTag() {
+        return (schemaCode != null ? schemaCode : entityType.toLowerCase()) + ":v" + version;
+    }
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Input, Button, Switch, message, Spin } from 'antd';
+import { Card, Table, Input, Button, Switch, Select, InputNumber, message, Spin } from 'antd';
 import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import { useAppStore } from '../store';
 import api from '../api';
@@ -11,23 +11,74 @@ interface PointTypeItem {
   tierRelevant: boolean;
   transferable: boolean;
   allowNegative: boolean;
+  allowRepay: boolean;
+  expiryMode: string;
+  expiryValue: number;
+  visible: boolean;
+  overdraftLimit: number;
 }
+
+const defaultPointTypes: PointTypeItem[] = [
+  { typeCode: 'REWARD', name: '消费积分', redeemable: true, tierRelevant: false, transferable: true, allowNegative: false, allowRepay: false, expiryMode: 'CALENDAR_YEARS', expiryValue: 1, visible: true, overdraftLimit: 0 },
+  { typeCode: 'TIER', name: '等级成长值', redeemable: false, tierRelevant: true, transferable: false, allowNegative: false, allowRepay: false, expiryMode: 'FIXED_DAYS', expiryValue: 0, visible: true, overdraftLimit: 0 },
+  { typeCode: 'CREDIT', name: '授信积分', redeemable: true, tierRelevant: false, transferable: false, allowNegative: true, allowRepay: false, expiryMode: 'FIXED_DAYS', expiryValue: 0, visible: false, overdraftLimit: 0 },
+];
+
+const expiryModeLabels: Record<string, string> = {
+  FIXED_DAYS: '固定天数',
+  CALENDAR_MONTHS: '自然月',
+  CALENDAR_YEARS: '自然年',
+};
+
+// hover 时显示输入框
+const HoverInput: React.FC<{ value: string; onChange: (v: string) => void; w?: number }> = ({ value, onChange, w }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  if (editing) return <Input size="small" value={draft} autoFocus style={{ width: w }} onChange={e => setDraft(e.target.value)} onBlur={() => { onChange(draft); setEditing(false); }} onPressEnter={() => { onChange(draft); setEditing(false); }} />;
+  return <span style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 4, transition: 'background 0.2s', display: 'inline-block', width: w, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onMouseEnter={e => e.currentTarget.style.background = '#f5f5f5'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'} onClick={() => { setDraft(value); setEditing(true); }}>{value || <span style={{ color: '#ccc' }}>-</span>}</span>;
+};
+
+// hover 时显示数字输入框
+const HoverNumber: React.FC<{ value: number; onChange: (v: number) => void; w?: number }> = ({ value, onChange, w }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  if (editing) return <InputNumber size="small" value={draft} autoFocus style={{ width: w }} onChange={v => setDraft(v ?? 0)} onBlur={() => { onChange(draft); setEditing(false); }} onPressEnter={() => { onChange(draft); setEditing(false); }} />;
+  return <span style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 4, transition: 'background 0.2s', display: 'inline-block', width: w }} onMouseEnter={e => e.currentTarget.style.background = '#f5f5f5'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'} onClick={() => { setDraft(value); setEditing(true); }}>{value}</span>;
+};
+
+// hover 时显示下拉选择
+const HoverSelect: React.FC<{ value: string; options: { label: string; value: string }[]; onChange: (v: string) => void; w?: number }> = ({ value, options, onChange, w }) => {
+  const [editing, setEditing] = useState(false);
+  if (editing) return <Select size="small" value={value} autoFocus style={{ width: w }} onChange={v => { onChange(v); setEditing(false); }} onBlur={() => setEditing(false)} options={options} />;
+  return <span style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 4, transition: 'background 0.2s', display: 'inline-block', width: w }} onMouseEnter={e => e.currentTarget.style.background = '#f5f5f5'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'} onClick={() => setEditing(true)}>{expiryModeLabels[value] || value}</span>;
+};
 
 const PointsGrant: React.FC = () => {
   const PROG = useAppStore(s => s.currentProgramCode);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [pointTypes, setPointTypes] = useState<PointTypeItem[]>([
-    { typeCode: 'REWARD_POINTS', name: '消费积分', redeemable: true, tierRelevant: true, transferable: false, allowNegative: false },
-    { typeCode: 'TIER_POINTS', name: '等级成长值', redeemable: false, tierRelevant: true, transferable: false, allowNegative: false },
-  ]);
+  const [pointTypes, setPointTypes] = useState<PointTypeItem[]>(defaultPointTypes);
 
   useEffect(() => {
     setLoading(true);
-    api.get(`/admin/programs/${PROG}`)
+    api.get('/admin/tiers')
       .then(({ data }) => {
-        const p = data?.data;
-        if (p?.pointTypes) setPointTypes(p.pointTypes);
+        const d = data?.data;
+        if (d?.pointTypes && d.pointTypes.length > 0) {
+          setPointTypes(d.pointTypes.map((p: any) => ({
+            typeCode: p.typeCode || '',
+            name: p.name || '',
+            redeemable: p.redeemable ?? true,
+            tierRelevant: p.tierRelevant ?? false,
+            transferable: p.transferable ?? false,
+            allowNegative: p.allowNegative ?? false,
+            allowRepay: p.allowRepay ?? false,
+            expiryMode: p.expiryMode || 'FIXED_DAYS',
+            expiryValue: p.expiryValue ?? 365,
+            visible: p.visible ?? true,
+            overdraftLimit: p.overdraftLimit ?? 0,
+          })));
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -40,7 +91,7 @@ const PointsGrant: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.put(`/admin/programs/${PROG}`, { pointTypes });
+      await api.put('/admin/tiers', { pointTypes });
       message.success('积分类型已保存');
     } catch (e: any) {
       message.error(e.response?.data?.message || '保存失败');
@@ -50,35 +101,84 @@ const PointsGrant: React.FC = () => {
   };
 
   const columns = [
-    { title: '类型编码', dataIndex: 'typeCode', width: 160, render: (v: string, _: any, idx: number) => <Input size="small" value={v} onChange={e => updatePointType(idx, 'typeCode', e.target.value)} /> },
-    { title: '名称', dataIndex: 'name', width: 140, render: (v: string, _: any, idx: number) => <Input size="small" value={v} onChange={e => updatePointType(idx, 'name', e.target.value)} /> },
-    { title: '可兑换', dataIndex: 'redeemable', width: 80, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'redeemable', c)} /> },
-    { title: '算等级', dataIndex: 'tierRelevant', width: 80, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'tierRelevant', c)} /> },
-    { title: '可转赠', dataIndex: 'transferable', width: 80, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'transferable', c)} /> },
-    { title: '允许负数', dataIndex: 'allowNegative', width: 90, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'allowNegative', c)} /> },
     {
-      title: '操作', width: 60,
+      title: '类型编码', dataIndex: 'typeCode', width: 120,
+      render: (v: string, _: any, idx: number) => <HoverInput value={v} onChange={val => updatePointType(idx, 'typeCode', val)} w={100} />,
+    },
+    {
+      title: '名称', dataIndex: 'name', width: 110,
+      render: (v: string, _: any, idx: number) => <HoverInput value={v} onChange={val => updatePointType(idx, 'name', val)} w={90} />,
+    },
+    {
+      title: '可兑换', dataIndex: 'redeemable', width: 70,
+      render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'redeemable', c)} />,
+    },
+    {
+      title: '算等级', dataIndex: 'tierRelevant', width: 70,
+      render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'tierRelevant', c)} />,
+    },
+    {
+      title: '允许负分', dataIndex: 'allowNegative', width: 80,
+      render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'allowNegative', c)} />,
+    },
+    {
+      title: '过期模式', dataIndex: 'expiryMode', width: 100,
+      render: (v: string, _: any, idx: number) => (
+        <HoverSelect value={v} onChange={val => updatePointType(idx, 'expiryMode', val)}
+          w={90}
+          options={[
+            { label: '固定天数', value: 'FIXED_DAYS' },
+            { label: '自然月', value: 'CALENDAR_MONTHS' },
+            { label: '自然年', value: 'CALENDAR_YEARS' },
+          ]}
+        />
+      ),
+    },
+    {
+      title: '过期值', dataIndex: 'expiryValue', width: 80,
+      render: (v: number, _: any, idx: number) => <HoverNumber value={v} onChange={val => updatePointType(idx, 'expiryValue', val)} w={70} />,
+    },
+    {
+      title: '可冲抵', dataIndex: 'allowRepay', width: 70,
+      render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'allowRepay', c)} />,
+    },
+    {
+      title: '操作', width: 50,
       render: (_: any, __: any, idx: number) => (
-        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setPointTypes(prev => prev.filter((_, i) => i !== idx))} />
+        <span style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+          onClick={() => setPointTypes(prev => prev.filter((_, i) => i !== idx))}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="9" stroke="#1a1a1a" strokeWidth="1.5" fill="white" />
+            <path d="M6.5 6.5L13.5 13.5M13.5 6.5L6.5 13.5" stroke="#1a1a1a" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </span>
       ),
     },
   ];
 
   return (
     <Card
-      title="积分类型字典"
+      title="积分类型配置"
       extra={<Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>保存</Button>}
-      style={{ maxWidth: '100%' }}
     >
+      <style>{`.ant-input:focus, .ant-input-number:focus, .ant-input-focused, .ant-input-number-focused { box-shadow: none !important; border-color: #d9d9d9 !important; } .ant-select-focused .ant-select-selector { box-shadow: none !important; border-color: #d9d9d9 !important; }`}</style>
       {loading ? <Spin /> : (
         <Table
           dataSource={pointTypes}
           columns={columns}
-          rowKey="typeCode"
+          rowKey={(_, idx) => String(idx)}
           pagination={false}
           size="small"
+          scroll={{ x: 900 }}
           footer={() => (
-            <Button size="small" type="dashed" icon={<PlusOutlined />} block onClick={() => setPointTypes(prev => [...prev, { typeCode: '', name: '', redeemable: false, tierRelevant: false, transferable: false, allowNegative: false }])}>
+            <Button size="small" type="text" icon={<PlusOutlined />} block
+              onClick={() => setPointTypes(prev => [...prev, {
+                typeCode: '', name: '新积分类型', redeemable: true, tierRelevant: false,
+                transferable: false, allowNegative: false, allowRepay: false,
+                expiryMode: 'CALENDAR_YEARS', expiryValue: 1, visible: true,
+                overdraftLimit: 0,
+              }])}
+            >
               添加积分类型
             </Button>
           )}

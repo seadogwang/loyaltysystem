@@ -3,12 +3,15 @@ package com.loyalty.platform.accounting;
 import com.loyalty.platform.common.context.TenantContext;
 import com.loyalty.platform.common.event.EventBridge;
 import com.loyalty.platform.common.exception.BusinessException;
+import com.loyalty.platform.common.util.ExpiryCalculator;
 import com.loyalty.platform.domain.entity.AccountTransaction;
 import com.loyalty.platform.domain.entity.MemberAccount;
 import com.loyalty.platform.domain.entity.PointTypeDefinition;
+import com.loyalty.platform.domain.entity.RepaymentAllocation;
 import com.loyalty.platform.domain.repository.AccountTransactionRepository;
 import com.loyalty.platform.domain.repository.MemberAccountRepository;
 import com.loyalty.platform.domain.repository.PointTypeDefinitionRepository;
+import com.loyalty.platform.domain.repository.RepaymentAllocationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -68,6 +72,7 @@ public class PointGrantService {
     private final AccountTransactionRepository txRepo;
     private final EventBridge eventBridge;
     private final PointTypeDefinitionRepository pointTypeRepo;
+    private final RepaymentAllocationRepository repayAllocRepo;
 
     /** BigDecimal 精度：4 位小数，四舍五入 */
     private static final int SCALE = 4;
@@ -75,10 +80,12 @@ public class PointGrantService {
     public PointGrantService(MemberAccountRepository accountRepo,
                              AccountTransactionRepository txRepo,
                              PointTypeDefinitionRepository pointTypeRepo,
+                             RepaymentAllocationRepository repayAllocRepo,
                              @Autowired(required = false) EventBridge eventBridge) {
         this.accountRepo = accountRepo;
         this.txRepo = txRepo;
         this.pointTypeRepo = pointTypeRepo;
+        this.repayAllocRepo = repayAllocRepo;
         this.eventBridge = eventBridge;
     }
 
@@ -154,7 +161,77 @@ public class PointGrantService {
                     debt, offsetAmount, newOverdraft, remainingToGrant);
         }
 
-        // ==================== Step 2: 跨账户还信用——用当前资产偿还 CREDIT 账户欠款 ====================
+        // ==================== Step 2: 负债冲抵——偿还可冲抵积分 ====================
+        // 设计文档 §4.3: 正式积分发放时，检查会员所有 allow_repay=true 的负债流水
+        // 按 FEFO（过期时间从近到远）冲抵
+        // 冲抵明细先占位 repaymentTxId=0L，在 Step 4 ACCRUAL 创建后回填真实 ID
+        List<RepaymentAllocation> step2Allocations = new ArrayList<>();
+        if (remainingToGrant.compareTo(BigDecimal.ZERO) > 0) {
+            PointTypeDefinition currentPt = pointTypeRepo
+                    .findByProgramCodeAndTypeCode(programCode, accountType).orElse(null);
+            if (currentPt == null || !Boolean.TRUE.equals(currentPt.getAllowRepay())) {
+                // 当前积分类型不是负债积分，检查是否需要冲抵其他负债
+                List<AccountTransaction> repayableTxList = txRepo.findRepayableForMember(
+                        programCode, memberId);
+                for (AccountTransaction repayableTx : repayableTxList) {
+                    if (remainingToGrant.compareTo(BigDecimal.ZERO) <= 0) break;
+
+                    // null-safe: 历史 DB 行的 remainingAmount/repaidAmount 可能为 null
+                    BigDecimal availableDebt = repayableTx.getRemainingAmount() != null
+                            ? repayableTx.getRemainingAmount() : BigDecimal.ZERO;
+                    if (availableDebt.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+                    BigDecimal offsetAmount = remainingToGrant.min(availableDebt);
+
+                    // 记录冲抵快照
+                    BigDecimal snapshotBefore = availableDebt;
+
+                    // 减少负债流水的 remainingAmount (null-safe)
+                    BigDecimal newRemaining = availableDebt.subtract(offsetAmount);
+                    repayableTx.setRemainingAmount(newRemaining);
+                    BigDecimal currentRepaid = repayableTx.getRepaidAmount() != null
+                            ? repayableTx.getRepaidAmount() : BigDecimal.ZERO;
+                    repayableTx.setRepaidAmount(currentRepaid.add(offsetAmount));
+                    if (newRemaining.compareTo(BigDecimal.ZERO) == 0) {
+                        repayableTx.setStatus("REPAID");
+                    }
+                    txRepo.save(repayableTx);
+
+                    // 记录冲抵明细 (repaymentTxId 占位，Step 4 后回填)
+                    RepaymentAllocation alloc = RepaymentAllocation.builder()
+                            .programCode(programCode)
+                            .memberId(memberId)
+                            .repaymentTxId(0L) // 占位：ACCRUAL 创建后回填真实 ID
+                            .repayableTxId(repayableTx.getId())
+                            .offsetAmount(offsetAmount)
+                            .snapshotRemainingBefore(snapshotBefore)
+                            .status("ACTIVE")
+                            .build();
+                    repayAllocRepo.save(alloc);
+                    step2Allocations.add(alloc);
+
+                    // 更新负债账户的 pending_repay_amount
+                    try {
+                        var repayAccount = accountRepo.findByMemberIdAndTypeForUpdate(
+                                programCode, memberId, repayableTx.getAccountType()).orElse(null);
+                        if (repayAccount != null) {
+                            repayAccount.setPendingRepayAmount(
+                                    repayAccount.getPendingRepayAmount().subtract(offsetAmount));
+                            accountRepo.save(repayAccount);
+                        }
+                    } catch (Exception e) {
+                        log.warn("[Grant] 更新 pending_repay_amount 失败: {}", e.getMessage());
+                    }
+
+                    remainingToGrant = remainingToGrant.subtract(offsetAmount);
+                    log.info("[Grant] 负债冲抵: repayableTxId={}, debt={}, offset={}, remainingDebt={}, grantLeft={}",
+                            repayableTx.getId(), snapshotBefore, offsetAmount,
+                            newRemaining, remainingToGrant);
+                }
+            }
+        }
+
+        // ==================== Step 3: 跨账户还信用——用当前资产偿还 CREDIT 账户欠款 ====================
         // 设计文档 4.2.2: 信用欠款记录在独立的 CREDIT 账户上，需跨账户查询
         if (remainingToGrant.compareTo(BigDecimal.ZERO) > 0) {
             MemberAccount creditAccount = accountRepo.findByMemberIdAndTypeForUpdate(
@@ -186,18 +263,44 @@ public class PointGrantService {
             }
         }
 
-        // ==================== Step 3: 真实入账——生成 ACCRUAL 正向批次 ====================
+        // ==================== Step 4: 真实入账——生成 ACCRUAL 正向批次 ====================
+        AccountTransaction accrualTx = null;
         if (remainingToGrant.compareTo(BigDecimal.ZERO) > 0) {
             LocalDateTime expiry = calculateExpiryDate(programCode, accountType);
-            insertTransaction(programCode, memberId, accountType, accountId, "ACCRUAL",
+            accrualTx = insertTransaction(programCode, memberId, accountType, accountId, "ACCRUAL",
                     remainingToGrant, expiry, ruleCode, ruleSnapshotId, null);
+            // 如果是负债积分，标记为可冲抵
+            PointTypeDefinition pt = pointTypeRepo
+                    .findByProgramCodeAndTypeCode(programCode, accountType).orElse(null);
+            if (pt != null && Boolean.TRUE.equals(pt.getAllowRepay())) {
+                accrualTx.setRepayable(true);
+                txRepo.save(accrualTx);
+                // 更新账户的 pending_repay_amount
+                try {
+                    account.setPendingRepayAmount(
+                            account.getPendingRepayAmount().add(remainingToGrant));
+                    accountRepo.save(account);
+                } catch (Exception e) {
+                    log.warn("[Grant] 更新 pending_repay_amount 失败: {}", e.getMessage());
+                }
+            }
             log.debug("[Grant] ACCRUAL 入账: amount={}, expiresAt={}", remainingToGrant, expiry);
         } else if (remainingToGrant.compareTo(BigDecimal.ZERO) == 0) {
             log.info("[Grant] 发分完全用于冲抵，无正向入账: member={}, original={}",
                     memberId, pointsToGrant);
         }
 
-        // ==================== Step 4: 更新累计统计 ====================
+        // ==================== 回填 Step 2 冲抵明细的 repaymentTxId ====================
+        if (accrualTx != null && !step2Allocations.isEmpty()) {
+            for (RepaymentAllocation alloc : step2Allocations) {
+                alloc.setRepaymentTxId(accrualTx.getId());
+                repayAllocRepo.save(alloc);
+            }
+            log.debug("[Grant] 回填冲抵明细 repaymentTxId: accrualId={}, allocs={}",
+                    accrualTx.getId(), step2Allocations.size());
+        }
+
+        // ==================== Step 5: 更新累计统计 ====================
         // R-PTS-06: totalAccrued 只统计实际入账部分（remainingToGrant），不含冲抵透支/信用的部分
         account.setTotalAccrued(account.getTotalAccrued().add(remainingToGrant.compareTo(BigDecimal.ZERO) > 0 ? remainingToGrant : BigDecimal.ZERO));
         accountRepo.save(account);
@@ -233,6 +336,8 @@ public class PointGrantService {
                 .ruleSnapshotId(ruleSnapshotId)
                 .referenceEventId(referenceEventId)
                 .operationKey(programCode + ":" + transactionType + ":" + memberId + ":" + System.currentTimeMillis())
+                .repayable(false)
+                .repaidAmount(BigDecimal.ZERO)
                 .status("ACTIVE")
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -244,16 +349,9 @@ public class PointGrantService {
      */
     /**
      * 计算积分过期时间，根据积分类型配置的过期模式和值。
+     * 委托给 {@link ExpiryCalculator} 确保与等级过期逻辑一致。
      *
-     * <p>支持三种过期模式：
-     * <ul>
-     *   <li>{@code FIXED_DAYS}：从当前时间起 + N 天</li>
-     *   <li>{@code CALENDAR_MONTHS}：N 个完整自然月后的月末最后一天<br>
-     *       例如：5月 + 12个月 = 次年6月30日</li>
-     *   <li>{@code CALENDAR_YEARS}：N 个完整自然年后的年末最后一天<br>
-     *       例如：2025年 + 1年 = 2026年12月31日</li>
-     * </ul>
-     * 如果值为 0，表示永不过期，返回 null。
+     * <p>如果值为 0，表示永不过期，返回 null。
      */
     private LocalDateTime calculateExpiryDate(String programCode, String accountType) {
         // 查找积分类型配置
@@ -264,36 +362,14 @@ public class PointGrantService {
         String expiryMode = (pt != null && pt.getExpiryMode() != null) ? pt.getExpiryMode() : "FIXED_DAYS";
         Integer expiryValue = (pt != null && pt.getExpiryValue() != null) ? pt.getExpiryValue() : 365;
 
-        // 值为 0 表示永不过期
-        if (expiryValue == 0) {
+        LocalDateTime result = ExpiryCalculator.calculateExpiry(LocalDateTime.now(), expiryMode, expiryValue);
+        if (result == null) {
             log.debug("[Grant] 积分永不过期: type={}", accountType);
-            return null;
+        } else {
+            log.debug("[Grant] 过期时间: type={}, mode={}, value={}, expiresAt={}",
+                    accountType, expiryMode, expiryValue, result);
         }
-
-        LocalDateTime now = LocalDateTime.now();
-        switch (expiryMode) {
-            case "CALENDAR_MONTHS":
-                // N 个完整自然月后，月末最后一天
-                LocalDateTime monthEnd = now.plusMonths(expiryValue);
-                monthEnd = monthEnd.withDayOfMonth(monthEnd.toLocalDate().lengthOfMonth());
-                monthEnd = monthEnd.withHour(23).withMinute(59).withSecond(59);
-                log.debug("[Grant] 自然月过期: type={}, months={}, expiresAt={}", accountType, expiryValue, monthEnd);
-                return monthEnd;
-
-            case "CALENDAR_YEARS":
-                // N 个完整自然年后，年末最后一天
-                LocalDateTime yearEnd = now.plusYears(expiryValue);
-                yearEnd = yearEnd.withMonth(12).withDayOfMonth(31);
-                yearEnd = yearEnd.withHour(23).withMinute(59).withSecond(59);
-                log.debug("[Grant] 自然年过期: type={}, years={}, expiresAt={}", accountType, expiryValue, yearEnd);
-                return yearEnd;
-
-            case "FIXED_DAYS":
-            default:
-                LocalDateTime fixed = now.plusDays(expiryValue);
-                log.debug("[Grant] 固定天数过期: type={}, days={}, expiresAt={}", accountType, expiryValue, fixed);
-                return fixed;
-        }
+        return result;
     }
 
     /**

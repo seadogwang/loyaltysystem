@@ -6,6 +6,7 @@ import com.loyalty.platform.common.context.TenantContext;
 import com.loyalty.platform.common.dto.ApiResponse;
 import com.loyalty.platform.domain.entity.*;
 import com.loyalty.platform.domain.repository.FlowDefinitionRepository;
+import com.loyalty.platform.domain.repository.MemberAccountRepository;
 import com.loyalty.platform.domain.repository.PointTypeDefinitionRepository;
 import com.loyalty.platform.domain.repository.ProgramRepository;
 import com.loyalty.platform.domain.repository.RuleDefinitionRepository;
@@ -13,7 +14,7 @@ import com.loyalty.platform.domain.repository.TierDefinitionRepository;
 import com.loyalty.platform.flow.EventContext;
 import com.loyalty.platform.activity.StepCycleCalculator;
 import com.loyalty.platform.activity.UnifiedPromoDrlGenerator;
-import com.loyalty.platform.api.service.SchemaService;
+import com.loyalty.platform.api.service.ProgramSchemaService;
 import com.loyalty.platform.rules.AiRuleGenerationService;
 import com.loyalty.platform.rules.DroolsTestRunner;
 import com.loyalty.platform.rules.KieBaseCacheManager;
@@ -64,7 +65,8 @@ public class AdminController {
     private final FlowDefinitionRepository flowDefRepo;
     private final FlowExecutor flowExecutor;
     private final UnifiedPromoDrlGenerator promoDrlGenerator;
-    private final SchemaService schemaService;
+    private final ProgramSchemaService programSchemaService;
+    private final MemberAccountRepository memberAccountRepo;
 
     public AdminController(AiRuleGenerationService aiRuleGen,
                            ProgramRepository programRepo,
@@ -80,7 +82,8 @@ public class AdminController {
                            FlowDefinitionRepository flowDefRepo,
                            FlowExecutor flowExecutor,
                            UnifiedPromoDrlGenerator promoDrlGenerator,
-                           SchemaService schemaService) {
+                           ProgramSchemaService programSchemaService,
+                           MemberAccountRepository memberAccountRepo) {
         this.aiRuleGen = aiRuleGen;
         this.programRepo = programRepo;
         this.pointTypeRepo = pointTypeRepo;
@@ -95,7 +98,8 @@ public class AdminController {
         this.flowDefRepo = flowDefRepo;
         this.flowExecutor = flowExecutor;
         this.promoDrlGenerator = promoDrlGenerator;
-        this.schemaService = schemaService;
+        this.programSchemaService = programSchemaService;
+        this.memberAccountRepo = memberAccountRepo;
     }
 
     @GetMapping("/cache/enums")
@@ -311,6 +315,8 @@ public class AdminController {
             m.put("sequence", t.getSequence());
             if (t.getUpgradeCriteria() != null) m.put("minPoints", t.getUpgradeCriteria().get("min_points"));
             if (t.getUpgradeCriteria() != null) m.put("maxPoints", t.getUpgradeCriteria().get("max_points"));
+            if (t.getUpgradeCriteria() != null) m.put("validityMode", t.getUpgradeCriteria().getOrDefault("validity_mode", "CALENDAR_YEARS"));
+            if (t.getUpgradeCriteria() != null) m.put("validityValue", t.getUpgradeCriteria().getOrDefault("validity_value", 1));
             return m;
         }).collect(Collectors.toList());
 
@@ -706,7 +712,7 @@ public class AdminController {
         EventFact eventFact = new EventFact(pc, eventType, memberId, "TEST",
                 java.time.Instant.now(), "test-run-" + System.currentTimeMillis(), null, eventPayload);
 
-        // 构建 MemberFact（从 DB 读取或使用默认值）
+        // 构建 MemberFact（从 DB 读取会员 + 账户数据，使用真实的 totalSpent/tierPoints）
         MemberFact memberFact;
         try {
             Member member = em.createQuery(
@@ -714,10 +720,34 @@ public class AdminController {
                     Member.class)
                     .setParameter("pc", pc).setParameter("mid", Long.parseLong(memberId))
                     .getSingleResult();
+
+            // 从 MemberAccount 加载真实的 totalSpent (REWARD_POINTS totalAccrued) 和 tierPoints (TIER balance)
+            double totalSpent = 0.0;
+            double tierPoints = 0.0;
+            try {
+                var rewardAccount = memberAccountRepo.findByMemberIdAndType(pc, member.getMemberId(), "REWARD_POINTS");
+                if (rewardAccount.isPresent()) {
+                    var acc = rewardAccount.get();
+                    if (acc.getTotalAccrued() != null) totalSpent = acc.getTotalAccrued().doubleValue();
+                }
+            } catch (Exception ignored) {}
+            try {
+                var tierAccount = memberAccountRepo.findByMemberIdAndType(pc, member.getMemberId(), "TIER_POINTS");
+                if (tierAccount.isPresent()) {
+                    var acc = tierAccount.get();
+                    // TIER 账户余额即等级成长值
+                    BigDecimal balance = acc.getTotalAccrued() != null
+                            ? acc.getTotalAccrued().subtract(
+                            acc.getTotalRedeemed() != null ? acc.getTotalRedeemed() : BigDecimal.ZERO)
+                            : BigDecimal.ZERO;
+                    tierPoints = balance.doubleValue();
+                }
+            } catch (Exception ignored) {}
+
             memberFact = new MemberFact(pc, member.getMemberId(), member.getTierCode(),
-                    member.getStatus(), member.getExtAttributes());
+                    member.getStatus(), member.getExtAttributes(), totalSpent, tierPoints);
         } catch (Exception e) {
-            memberFact = new MemberFact(pc, Long.parseLong(memberId), "BASE", "ENROLLED", Map.of());
+            memberFact = new MemberFact(pc, Long.parseLong(memberId), "BASE", "ENROLLED", Map.of(), 0.0, 0.0);
         }
 
         // 执行推理
@@ -780,10 +810,10 @@ public class AdminController {
             return ResponseEntity.ok(ApiResponse.error("ERR_INVALID", "entityType 不能为空"));
         }
 
-        SchemaVersion sv = schemaService.saveSchema(pc, entityType, schema != null ? schema : Map.of());
+        ProgramSchema sv = programSchemaService.saveSchema(pc, entityType, schema != null ? schema : Map.of());
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("id", sv.getId());
-        data.put("entityType", sv.getSchemaType());
+        data.put("entityType", sv.getEntityType());
         data.put("version", sv.getVersion());
         data.put("status", sv.getStatus());
         return ResponseEntity.ok(ApiResponse.success(data));
@@ -803,10 +833,10 @@ public class AdminController {
             return ResponseEntity.ok(ApiResponse.error("ERR_INVALID", "entityType 不能为空"));
         }
 
-        SchemaVersion sv = schemaService.publishSchema(pc, entityType, schema != null ? schema : Map.of());
+        ProgramSchema sv = programSchemaService.publishSchema(pc, entityType, schema != null ? schema : Map.of());
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("id", sv.getId());
-        data.put("entityType", sv.getSchemaType());
+        data.put("entityType", sv.getEntityType());
         data.put("version", sv.getVersion());
         data.put("status", sv.getStatus());
         return ResponseEntity.ok(ApiResponse.success(data));
@@ -1359,6 +1389,7 @@ public class AdminController {
             if (pt.containsKey("tierRelevant")) entity.setIsTierCalc((Boolean) pt.get("tierRelevant"));
             if (pt.containsKey("transferable")) entity.setIsTransferable((Boolean) pt.get("transferable"));
             if (pt.containsKey("allowNegative")) entity.setAllowNegative((Boolean) pt.get("allowNegative"));
+            if (pt.containsKey("allowRepay")) entity.setAllowRepay((Boolean) pt.get("allowRepay"));
 
             // 新增字段
             if (pt.containsKey("expiryMode")) entity.setExpiryMode((String) pt.get("expiryMode"));
@@ -1389,6 +1420,8 @@ public class AdminController {
             Map<String, Object> upgrade = new LinkedHashMap<>();
             if (t.containsKey("minPoints")) upgrade.put("min_points", toBigDecimal(t.get("minPoints")));
             if (t.containsKey("maxPoints")) upgrade.put("max_points", toBigDecimal(t.get("maxPoints")));
+            if (t.containsKey("validityMode")) upgrade.put("validity_mode", t.get("validityMode"));
+            if (t.containsKey("validityValue")) upgrade.put("validity_value", toInt(t.get("validityValue")));
             if (!upgrade.isEmpty()) tier.setUpgradeCriteria(upgrade);
 
             tier.setUpdatedAt(LocalDateTime.now());
@@ -1404,6 +1437,7 @@ public class AdminController {
         m.put("tierRelevant", pt.getIsTierCalc());
         m.put("transferable", pt.getIsTransferable());
         m.put("allowNegative", pt.getAllowNegative());
+        m.put("allowRepay", pt.getAllowRepay());
         m.put("expiryMode", pt.getExpiryMode());
         m.put("expiryValue", pt.getExpiryValue());
         m.put("visible", pt.getIsVisible());

@@ -81,6 +81,14 @@ public class Member implements Serializable {
     @Column(name = "tier_code", length = 16)
     private String tierCode;
 
+    /** 等级生效时间 */
+    @Column(name = "tier_effective_from")
+    private LocalDateTime tierEffectiveFrom;
+
+    /** 等级过期时间 */
+    @Column(name = "tier_expires_at")
+    private LocalDateTime tierExpiresAt;
+
     /** 写入该数据时的 Schema 版本号 */
     @Column(name = "schema_version", length = 16)
     private String schemaVersion;

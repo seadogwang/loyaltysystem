@@ -13,4 +13,10 @@ public interface ChannelAdapterConfigRepository extends BaseRepository<ChannelAd
 
     @Query("SELECT c FROM ChannelAdapterConfig c WHERE c.programCode = :pc AND c.channel = :ch AND c.status = 'ACTIVE'")
     Optional<ChannelAdapterConfig> findActiveByProgramAndChannel(@Param("pc") String programCode, @Param("ch") String channel);
+
+    /**
+     * 按 programCode 和 channel 查找配置（不限状态）。
+     */
+    @Query("SELECT c FROM ChannelAdapterConfig c WHERE c.programCode = :pc AND c.channel = :ch")
+    Optional<ChannelAdapterConfig> findByProgramCodeAndChannel(@Param("pc") String programCode, @Param("ch") String channel);
 }

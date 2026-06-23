@@ -23,15 +23,29 @@ public class MemberFact {
     private String status;
     private Map<String, Object> extAttributes;
 
+    /** 累计消费金额(从 member_account.total_accrued 或 extAttributes 提取) */
+    private Double totalSpent;
+
+    /** 当前等级成长值(TIER账户余额) */
+    private Double tierPoints;
+
     public MemberFact() {}
 
     public MemberFact(String programCode, Long memberId, String tierCode,
                       String status, Map<String, Object> extAttributes) {
+        this(programCode, memberId, tierCode, status, extAttributes, 0.0, 0.0);
+    }
+
+    public MemberFact(String programCode, Long memberId, String tierCode,
+                      String status, Map<String, Object> extAttributes,
+                      Double totalSpent, Double tierPoints) {
         this.programCode = programCode;
         this.memberId = memberId;
         this.tierCode = tierCode;
         this.status = status;
         this.extAttributes = extAttributes;
+        this.totalSpent = totalSpent;
+        this.tierPoints = tierPoints;
     }
 
     // ---- DRL 辅助提取方法 ----
@@ -83,4 +97,10 @@ public class MemberFact {
 
     public Map<String, Object> getExtAttributes() { return extAttributes; }
     public void setExtAttributes(Map<String, Object> extAttributes) { this.extAttributes = extAttributes; }
+
+    public Double getTotalSpent() { return totalSpent; }
+    public void setTotalSpent(Double totalSpent) { this.totalSpent = totalSpent; }
+
+    public Double getTierPoints() { return tierPoints; }
+    public void setTierPoints(Double tierPoints) { this.tierPoints = tierPoints; }
 }

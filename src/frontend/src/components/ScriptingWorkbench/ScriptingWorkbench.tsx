@@ -6,7 +6,7 @@ import {
   ThunderboltOutlined, CopyOutlined, ClearOutlined,
 } from '@ant-design/icons';
 import type { editor } from 'monaco-editor';
-import type { TransformTestResult } from '../../types';
+import type { TransformTestResult } from '../../types/index';
 import { testTransform } from '../../api';
 
 // ==================== 内置转换模板 ====================

@@ -38,6 +38,24 @@ public class ChannelAdapterConfig {
     @Column(name = "response_mapping", columnDefinition = "jsonb")
     private Map<String, Object> responseMapping;
 
+    /**
+     * 入站映射规则 (JSONB) — Map&lt;operationCode, List&lt;MappingRule&gt;&gt;
+     * <p>API 响应字段 → 业务实体字段的映射规则，由 ChartDB MappingEditor 配置。
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "inbound_mappings", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> inboundMappings = Map.of();
+
+    /**
+     * 出站映射规则 (JSONB) — Map&lt;operationCode, List&lt;MappingRule&gt;&gt;
+     * <p>业务实体字段 → API 请求字段的映射规则。
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "outbound_mappings", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> outboundMappings = Map.of();
+
     /** 速率限制配置 (JSONB) */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "rate_limit_config", columnDefinition = "jsonb")

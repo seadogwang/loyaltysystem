@@ -17,6 +17,7 @@ public class PointTypeDefinition {
     @Column(name = "is_tier_calc") @Builder.Default private Boolean isTierCalc = false;
     @Column(name = "is_transferable") @Builder.Default private Boolean isTransferable = false;
     @Column(name = "allow_negative") @Builder.Default private Boolean allowNegative = false;
+    @Column(name = "allow_repay") @Builder.Default private Boolean allowRepay = false;
     @Column(name = "expiry_days") @Builder.Default private Integer expiryDays = 365;
 
     // 新增：有效期模式 (FIXED_DAYS / CALENDAR_MONTHS / CALENDAR_YEARS)

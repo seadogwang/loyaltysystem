@@ -1,25 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Drawer, Form, Input, Select, Button, Tabs, Table, InputNumber, Switch,
-  message, Space, Typography, Divider, Popconfirm, Tag,
+  Form, Input, Select, Button, Tabs, Table, InputNumber,
+  message, Space, Typography,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, SaveOutlined, DragOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import PageWrapper from '../components/PageWrapper';
 import api from '../api';
 
-const { Title, Text } = Typography;
-
-// ==================== 积分类型字典 ====================
-
-interface PointTypeItem {
-  typeCode: string;
-  name: string;
-  redeemable: boolean;
-  tierRelevant: boolean;
-  transferable: boolean;
-  allowNegative: boolean;
-}
+const { Title } = Typography;
 
 // ==================== 等级阶梯 ====================
 
@@ -41,12 +30,6 @@ const ProgramEdit: React.FC = () => {
   const [form] = Form.useForm();
   const [activeTab, setActiveTab] = useState('basic');
 
-  // 积分类型字典
-  const [pointTypes, setPointTypes] = useState<PointTypeItem[]>([
-    { typeCode: 'REWARD_POINTS', name: '消费积分', redeemable: true, tierRelevant: true, transferable: false, allowNegative: false },
-    { typeCode: 'TIER_POINTS', name: '等级成长值', redeemable: false, tierRelevant: true, transferable: false, allowNegative: false },
-  ]);
-
   // 等级阶梯
   const [tiers, setTiers] = useState<TierItem[]>([
     { tierCode: 'BASE', tierName: '普通会员', minPoints: 0, maxPoints: 1000, benefits: '基础权益' },
@@ -63,7 +46,6 @@ const ProgramEdit: React.FC = () => {
           const p = data?.data;
           if (p) {
             form.setFieldsValue(p);
-            if (p.pointTypes) setPointTypes(p.pointTypes);
             if (p.tiers) setTiers(p.tiers);
           }
         })
@@ -77,7 +59,6 @@ const ProgramEdit: React.FC = () => {
     try {
       const payload = {
         ...values,
-        pointTypes,
         tiers,
         overdraftLimit: values.overdraftLimit || 0,
         graceDays: values.graceDays || 7,
@@ -94,26 +75,6 @@ const ProgramEdit: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  };
-
-  // 积分类型字典列
-  const ptColumns = [
-    { title: '类型编码', dataIndex: 'typeCode', width: 140, render: (v: string, _: any, idx: number) => <Input size="small" value={v} onChange={e => updatePointType(idx, 'typeCode', e.target.value)} /> },
-    { title: '名称', dataIndex: 'name', width: 120, render: (v: string, _: any, idx: number) => <Input size="small" value={v} onChange={e => updatePointType(idx, 'name', e.target.value)} /> },
-    { title: '可兑换', dataIndex: 'redeemable', width: 70, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'redeemable', c)} /> },
-    { title: '算等级', dataIndex: 'tierRelevant', width: 70, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'tierRelevant', c)} /> },
-    { title: '可转赠', dataIndex: 'transferable', width: 70, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'transferable', c)} /> },
-    { title: '允许负数', dataIndex: 'allowNegative', width: 80, render: (v: boolean, _: any, idx: number) => <Switch size="small" checked={v} onChange={c => updatePointType(idx, 'allowNegative', c)} /> },
-    {
-      title: '操作', width: 60,
-      render: (_: any, __: any, idx: number) => (
-        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setPointTypes(prev => prev.filter((_, i) => i !== idx))} />
-      ),
-    },
-  ];
-
-  const updatePointType = (idx: number, field: string, value: any) => {
-    setPointTypes(prev => prev.map((pt, i) => i === idx ? { ...pt, [field]: value } : pt));
   };
 
   // 等级阶梯列
@@ -140,7 +101,7 @@ const ProgramEdit: React.FC = () => {
       key: 'basic',
       label: '基础信息',
       children: (
-        <div style={{  }}>
+        <div>
           <Form.Item name="programCode" label="俱乐部代码" rules={[{ required: true, message: '请输入' }]}>
             <Input disabled={isEdit} placeholder="如 BRAND-A" />
           </Form.Item>
@@ -153,20 +114,6 @@ const ProgramEdit: React.FC = () => {
           <Form.Item name="status" label="状态" initialValue="ACTIVE">
             <Select options={[{ label: '激活', value: 'ACTIVE' }, { label: '停用', value: 'INACTIVE' }]} />
           </Form.Item>
-        </div>
-      ),
-    },
-    {
-      key: 'pointTypes',
-      label: '积分类型字典',
-      children: (
-        <div>
-          <Button type="dashed" icon={<PlusOutlined />} style={{ marginBottom: 12 }}
-            onClick={() => setPointTypes(prev => [...prev, { typeCode: '', name: '', redeemable: true, tierRelevant: false, transferable: false, allowNegative: false }])}>
-            添加积分类型
-          </Button>
-          <Table dataSource={pointTypes} columns={ptColumns} rowKey={(_, idx) => String(idx)}
-            size="small" pagination={false} />
         </div>
       ),
     },

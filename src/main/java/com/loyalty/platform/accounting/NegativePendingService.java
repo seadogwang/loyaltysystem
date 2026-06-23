@@ -32,8 +32,13 @@ public class NegativePendingService {
 
     @PersistenceContext private EntityManager em;
     private final MemberAccountRepository accountRepo;
+    private final RiskAlertService riskAlertService;
 
-    public NegativePendingService(MemberAccountRepository accountRepo) { this.accountRepo = accountRepo; }
+    public NegativePendingService(MemberAccountRepository accountRepo,
+                                  RiskAlertService riskAlertService) {
+        this.accountRepo = accountRepo;
+        this.riskAlertService = riskAlertService;
+    }
 
     /**
      * 记录无法完成的扣减债务，生成追偿工单。
@@ -71,6 +76,12 @@ public class NegativePendingService {
 
         // 2. 冻结兑换权限
         suspendRedemption(programCode, memberId);
+
+        // 3. 风险告警（不阻止交易，仅记录）
+        BigDecimal negativeBalance = shortfall.negate(); // 余额为负
+        BigDecimal maxOverdraft = (account != null && account.getOverdraftLimit() != null)
+                ? account.getOverdraftLimit() : BigDecimal.ZERO;
+        riskAlertService.recordAlert(programCode, memberId, accountType, negativeBalance, maxOverdraft);
     }
 
     private void insertNegativePending(String programCode, Long memberId,

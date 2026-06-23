@@ -102,10 +102,35 @@ loyalty:
       - member_tier
       - member_merge_task
       - flow_definition
+      - llm_config
       - tenant
   security:
     # 查询哨兵模式：true=强制所有查询携带 programCode
     query-sentinel-enabled: true
+
+# Springdoc OpenAPI 配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+  group-configs:
+    - group: "event-api"
+      display-name: "Event Data API"
+      paths-to-match: "/api/event-data/**"
+    - group: "schema-api"
+      display-name: "Schema API"
+      paths-to-match: "/api/schemas/**"
+    - group: "flow-api"
+      display-name: "Flow/Event Execution API"
+      paths-to-match: "/api/events/**"
+    - group: "spi-gateway"
+      display-name: "SPI Gateway"
+      paths-to-match: "/api/open/spi/**"
 
 # LiteFlow 流程编排引擎配置（根级别）
 liteflow:

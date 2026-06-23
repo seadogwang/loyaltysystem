@@ -1,13 +1,13 @@
--- V1_8: 规则引擎业务实体 Schema — 与 transaction_event + member 表结构对齐
--- Schema 描述 DRL 规则中 $event.getPayload*() / $member.getExt*() 可访问的字段
+-- V1_8: Rule Engine Business Entity Schemas — aligned with transaction_event + member table structure
+-- Schema describes fields accessible in DRL rules via $event.getPayload*() / $member.getExt*()
 
--- Clean old data
+-- Clean old data (only delete records with version < 99, keep current ones)
 DELETE FROM schema_version WHERE schema_code IN ('TRANSACTION_EVENT','TRANSACTION','ORDER','BEHAVIOR','MEMBER')
-AND version < 99;
+AND version < 99 AND version < (SELECT COALESCE(MAX(version),0) FROM schema_version sv2 WHERE sv2.schema_code = schema_version.schema_code);
 
--- 1. ORDER: 订单事件标准化 payload
---    对应 transaction_event 列 + EventInboxProcessor 标准化后的字段
---    来源: TMALL/JD/DOUYIN/WECHAT 渠道 Webhook
+-- 1. ORDER: Standardized payload for order payment events
+--    Corresponds to transaction_event columns + fields standardized by EventInboxProcessor
+--    Source: TMALL/JD/DOUYIN/WECHAT channel webhooks
 INSERT INTO schema_version (program_code, schema_type, schema_code, version, status, schema_json)
 SELECT 'PROG001', 'ORDER', 'ORDER', 1, 'PUBLISHED', '{
   "type": "object",
@@ -31,10 +31,10 @@ SELECT 'PROG001', 'ORDER', 'ORDER', 1, 'PUBLISHED', '{
   },
   "required":["member_id","eventType"]
 }'::jsonb
-WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE schema_code='ORDER');
+WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE schema_code='ORDER' AND status='PUBLISHED');
 
--- 2. BEHAVIOR: 行为事件标准化 payload
---    对应 transaction_event 表 + CHECK_IN/SHARE/REGISTER 等行为
+-- 2. BEHAVIOR: Standardized payload for behavior events
+--    Corresponds to transaction_event table + CHECK_IN/SHARE/REGISTER etc.
 INSERT INTO schema_version (program_code, schema_type, schema_code, version, status, schema_json)
 SELECT 'PROG001', 'BEHAVIOR', 'BEHAVIOR', 1, 'PUBLISHED', '{
   "type": "object",
@@ -53,10 +53,10 @@ SELECT 'PROG001', 'BEHAVIOR', 'BEHAVIOR', 1, 'PUBLISHED', '{
   },
   "required":["member_id","eventType"]
 }'::jsonb
-WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE schema_code='BEHAVIOR');
+WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE schema_code='BEHAVIOR' AND status='PUBLISHED');
 
--- 3. MEMBER: 会员扩展属性
---    对应 member.ext_attributes JSONB 字段
+-- 3. MEMBER: Member extended attributes
+--    Corresponds to member.ext_attributes JSONB field
 INSERT INTO schema_version (program_code, schema_type, schema_code, version, status, schema_json)
 SELECT 'PROG001', 'MEMBER', 'MEMBER', 1, 'PUBLISHED', '{
   "type": "object",
@@ -80,4 +80,4 @@ SELECT 'PROG001', 'MEMBER', 'MEMBER', 1, 'PUBLISHED', '{
     "total_spent":    {"type":"number","title":"Total Spent"}
   }
 }'::jsonb
-WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE schema_code='MEMBER');
+WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE schema_code='MEMBER' AND status='PUBLISHED');

@@ -3,7 +3,7 @@ package com.loyalty.platform.api.controller;
 import com.loyalty.platform.accounting.PointGrantService;
 import com.loyalty.platform.accounting.PointRedeemService;
 import com.loyalty.platform.api.service.MemberService;
-import com.loyalty.platform.api.service.SchemaService;
+import com.loyalty.platform.api.service.ProgramSchemaService;
 import com.loyalty.platform.common.annotation.Idempotent;
 import com.loyalty.platform.common.context.TenantContext;
 import com.loyalty.platform.common.dto.ApiResponse;
@@ -33,19 +33,19 @@ public class MemberController {
     private final MemberRepository memberRepo;
     private final PointGrantService pointGrantService;
     private final PointRedeemService pointRedeemService;
-    private final SchemaService schemaService;
+    private final ProgramSchemaService programSchemaService;
     private final AccountTransactionRepository txRepo;
     private final MergeTaskRepository mergeTaskRepo;
 
     public MemberController(MemberService memberService, MemberRepository memberRepo,
                             PointGrantService pointGrantService, PointRedeemService pointRedeemService,
-                            SchemaService schemaService, AccountTransactionRepository txRepo,
+                            ProgramSchemaService programSchemaService, AccountTransactionRepository txRepo,
                             MergeTaskRepository mergeTaskRepo) {
         this.memberService = memberService;
         this.memberRepo = memberRepo;
         this.pointGrantService = pointGrantService;
         this.pointRedeemService = pointRedeemService;
-        this.schemaService = schemaService;
+        this.programSchemaService = programSchemaService;
         this.txRepo = txRepo;
         this.mergeTaskRepo = mergeTaskRepo;
     }
@@ -365,6 +365,8 @@ public class MemberController {
         Map<String, Object> vo = new LinkedHashMap<>();
         vo.put("memberId", String.valueOf(m.getMemberId()));
         vo.put("tierCode", m.getTierCode());
+        vo.put("tierEffectiveFrom", m.getTierEffectiveFrom());
+        vo.put("tierExpiresAt", m.getTierExpiresAt());
         vo.put("status", m.getStatus());
         vo.put("schemaVersion", m.getSchemaVersion());
         vo.put("createdAt", m.getCreatedAt());
@@ -436,7 +438,7 @@ public class MemberController {
 
         // Schema
         try {
-            Map<String, Object> schema = schemaService.getCurrentSchema(pc, "MEMBER");
+            Map<String, Object> schema = programSchemaService.getCurrentSchema(pc, "MEMBER");
             if (schema != null) vo.put("fieldSchema", schema.get("fieldSchema"));
         } catch (Exception ignored) {}
 
