@@ -103,6 +103,9 @@ loyalty:
       - member_merge_task
       - flow_definition
       - llm_config
+      - tier_definition
+      - tier_activity
+      - member_tier_activity_log
       - tenant
   security:
     # 查询哨兵模式：true=强制所有查询携带 programCode

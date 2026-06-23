@@ -19,4 +19,12 @@ public interface RuleDefinitionRepository extends BaseRepository<RuleDefinition,
     /** 按 ruleCode 查找 */
     @Query("SELECT r FROM RuleDefinition r WHERE r.programCode = :pc AND r.ruleCode = :ruleCode")
     Optional<RuleDefinition> findByRuleCode(@Param("pc") String programCode, @Param("ruleCode") String ruleCode);
+
+    /** 按 rulePurpose 查找 */
+    @Query("SELECT r FROM RuleDefinition r WHERE r.programCode = :pc AND r.rulePurpose = :purpose")
+    List<RuleDefinition> findByProgramCodeAndRulePurpose(@Param("pc") String programCode, @Param("purpose") String rulePurpose);
+
+    /** 按 rulePurpose + tier 查找 */
+    @Query("SELECT r FROM RuleDefinition r WHERE r.programCode = :pc AND r.rulePurpose = :purpose")
+    List<RuleDefinition> findByPurpose(@Param("pc") String programCode, @Param("purpose") String purpose);
 }

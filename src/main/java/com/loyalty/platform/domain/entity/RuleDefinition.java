@@ -36,6 +36,11 @@ public class RuleDefinition {
     @Builder.Default
     private String ruleCategory = "base";
 
+    /** 规则用途：EARN_POINTS / TIER_UPGRADE / TIER_DOWNGRADE / TIER_RETENTION / TIER_ACTIVITY */
+    @Column(name = "rule_purpose", length = 30)
+    @Builder.Default
+    private String rulePurpose = "EARN_POINTS";
+
     /** 规则组，同组内按 priority 排序执行 */
     @Column(name = "rule_group", length = 50)
     private String ruleGroup;
