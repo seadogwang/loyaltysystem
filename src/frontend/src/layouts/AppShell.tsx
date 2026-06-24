@@ -42,6 +42,7 @@ const menuItems: MenuItemType[] = [
   {
     key: 'settings', icon: <SettingOutlined />, label: '设置',
     children: [
+      { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers' },
       { key: 'points-grant', icon: <DollarOutlined />, label: '积分类型', path: '/points/grant' },
       { key: 'channel-list', icon: <ApiOutlined />, label: '渠道列表', path: '/channels' },
       { key: 'scripting', icon: <CodeOutlined />, label: '脚本工作台', path: '/channels/scripting' },
