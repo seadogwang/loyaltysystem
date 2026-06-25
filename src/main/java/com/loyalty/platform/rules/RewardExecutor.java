@@ -20,7 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 动作执行器 — 统一接收规则输出的 Action 集合并在一个强事务中执行。
@@ -103,6 +105,9 @@ public class RewardExecutor {
                     executed++;
                 } else if (action instanceof DowngradeTierAction downgrade) {
                     executeDowngradeTier(downgrade);
+                    executed++;
+                } else if (action instanceof IncrementCounterAction counter) {
+                    executeIncrementCounter(counter);
                     executed++;
                 } else {
                     log.warn("[RewardExecutor] 未知动作类型: {}", action.getClass().getSimpleName());
@@ -275,6 +280,46 @@ public class RewardExecutor {
         em.persist(tLog);
 
         log.info("[RewardExecutor] 等级降级完成: member={}, {}→{}", memberId, oldTier, newTier);
+    }
+
+    /**
+     * 执行计数器动作 — 更新 member.ext_attributes 中的变量值。
+     *
+     * <p>设计文档 §4.2: 变量存储在 member.ext_attributes JSONB 中。
+     * 计数器是用户自定义的动态变量，每次规则触发时按步长累加或递减。
+     */
+    private void executeIncrementCounter(IncrementCounterAction counter) {
+        Long memberId = parseMemberId(counter.getMemberId());
+        String counterName = counter.getCounterName();
+        String pc = counter.getProgramCode();
+
+        Member member = memberRepo.findByMemberId(pc, memberId)
+                .orElseThrow(() -> new BusinessException("ERR_MEMBER_NOT_FOUND",
+                        "Member not found: " + memberId));
+
+        Map<String, Object> ext = member.getExtAttributes();
+        if (ext == null) ext = new java.util.LinkedHashMap<>();
+
+        double currentValue = counter.getStartValue();
+        Object existing = ext.get(counterName);
+        if (existing instanceof Number) {
+            currentValue = ((Number) existing).doubleValue();
+        }
+
+        double newValue;
+        if ("-".equals(counter.getOperator())) {
+            newValue = currentValue - counter.getStep();
+        } else {
+            newValue = currentValue + counter.getStep();
+        }
+
+        ext.put(counterName, newValue);
+        member.setExtAttributes(ext);
+        member.setUpdatedAt(LocalDateTime.now());
+        memberRepo.save(member);
+
+        log.info("[RewardExecutor] 计数器更新: member={}, {} {} {} = {}→{}",
+                memberId, counterName, counter.getOperator(), counter.getStep(), currentValue, newValue);
     }
 
     /**

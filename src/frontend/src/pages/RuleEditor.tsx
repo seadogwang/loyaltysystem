@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   SaveOutlined, ThunderboltOutlined, SendOutlined, SettingOutlined,
-  GiftOutlined, LeftOutlined, RightOutlined, CheckOutlined, CopyOutlined, EditOutlined, DeleteOutlined, EyeOutlined,
+  GiftOutlined, LeftOutlined, RightOutlined, CheckOutlined, CopyOutlined, EditOutlined, EyeOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import PageWrapper from '../components/PageWrapper';
 import api from '../api';
@@ -15,7 +15,7 @@ import dayjs from 'dayjs';
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
 
-type Option = { label: string; value: string };
+type Option = { label: string; value: string; pointCategory?: string };
 type SchemaField = Option & { type: string; format?: string; enumValues?: string[] };
 interface ExtCondition { key: string; field: string; type?: string; format?: string; op: string; value: string; valueEnd?: string; entity?: string; }
 interface TierBonus { key: string; tier: string; bonus: number; }
@@ -23,6 +23,7 @@ interface PointFormula { key: string; pointType: string; field: string; multipli
 interface TierFormula { key: string; tier: string; pointType: string; multiplier: number; }
 interface CategoryWeight { key: string; cat: string; weight: number; }
 interface QuantityTier { key: string; minQty: number; bonus: number; }
+interface CounterItem { key: string; name: string; operator: '+' | '-'; startValue: number; step: number; }
 
 const OPS: Option[] = [
   { label: '>', value: '>' }, { label: '>=', value: '>=' },
@@ -41,6 +42,12 @@ function getOpsForField(type?: string, format?: string): Option[] {
   return OPS;
 }
 
+const ENTITY_OPTIONS: Option[] = [
+  { label: 'Order (订单)', value: 'ORDER' },
+  { label: 'BEHAVIOR (行为)', value: 'BEHAVIOR' },
+  { label: 'MEMBER (会员)', value: 'MEMBER' },
+];
+
 const RULE_CATEGORIES: Option[] = [
   { label: 'base (基础规则)', value: 'base' },
   { label: 'promo (促销活动)', value: 'promo' },
@@ -52,7 +59,7 @@ function generateDrl(data: Record<string, any>): string {
   const ruleName = data.ruleName || 'custom_rule';
   const safeName = ruleName.replace(/[^a-zA-Z0-9_]/g, '_');
   const ruleCategory = data.ruleCategory || 'purchase';
-  const entity = data.selectedEntity || 'ORDER';
+  const entity = (data.extConditions?.[0]?.entity) || 'ORDER';
   const calcMode = data.calcMode || 'total';
   const defaultPointType = (data.pointFormulas?.[0]?.pointType) || 'REWARD';
   const lines: string[] = [];
@@ -104,18 +111,14 @@ function generateDrl(data: Record<string, any>): string {
 
   if (entity === 'ORDER') {
     if (calcMode === 'total') {
-      // Multi point-type formulas
       const pfs: PointFormula[] = data.pointFormulas || [];
       if (pfs.length > 0) {
-        // Declare base value once
         actions.push(`    java.math.BigDecimal _base = $event.getPayloadNumber("${pfs[0].field || 'total_amount'}");`);
-        // Generate one awardPoints per formula (基础积分 — 无上限)
         for (const pf of pfs) {
           if (!pf.pointType || !pf.multiplier) continue;
           actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${pf.pointType}", _base.multiply(new java.math.BigDecimal("${pf.multiplier}")).setScale(0, java.math.RoundingMode.DOWN), "${safeName}", null);`);
         }
       }
-      // 积分活动额外奖励
       if (data.campaignReward > 0) {
         actions.push(`    // campaign extra reward`);
         actions.push(`    java.math.BigDecimal _campaign = new java.math.BigDecimal("${data.campaignReward}");`);
@@ -144,18 +147,50 @@ function generateDrl(data: Record<string, any>): string {
     actions.push(`    collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${defaultPointType}", new java.math.BigDecimal("${data.rewardPoints}"), "${safeName}", null);`);
   }
 
-  // Tier formulas: extra multiplier on specific point types
   const tfs: TierFormula[] = data.tierFormulas || [];
   for (const tf of tfs) {
     if (!tf.tier || !tf.pointType || !tf.multiplier) continue;
     actions.push(`    if ("${tf.tier}".equals($member.getTierCode())) { collector.awardPoints($event.getProgramCode(), $event.getMemberId(), "${tf.pointType}", _base.multiply(new java.math.BigDecimal("${tf.multiplier}")).setScale(0, java.math.RoundingMode.DOWN), "${safeName}_TIER", null); }`);
   }
   if (actions.length === 0) actions.push('    System.out.println("rule fired: " + $event.getEventId());');
+
+  // Counters: generate collector.incrementCounter() calls
+  const counterList: CounterItem[] = data.counters || [];
+  for (const ct of counterList) {
+    if (!ct.name) continue;
+    const step = ct.step || 1;
+    actions.push(`    // counter: ${ct.name} ${ct.operator} ${step}`);
+    actions.push(`    collector.incrementCounter($event.getProgramCode(), $event.getMemberId(), "${ct.name}", "${ct.operator}", ${step}, ${ct.startValue || 0}, "${safeName}", null);`);
+  }
+
   lines.push(actions.join('\n'));
   lines.push('end');
   if (data.aiGeneratedDrl?.trim()) { lines.push(''); lines.push('// === AI-generated ==='); lines.push(data.aiGeneratedDrl.trim()); }
   return lines.join('\n');
 }
+
+// ==================== 内联编辑组件 ====================
+
+const HoverInput: React.FC<{ value: string; onChange: (v: string) => void; w?: string; placeholder?: string }> = ({ value, onChange, w, placeholder }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  if (editing) return <Input size="small" value={draft} autoFocus style={{ width: w || '100%' }} placeholder={placeholder} onChange={e => setDraft(e.target.value)} onBlur={() => { onChange(draft); setEditing(false); }} onPressEnter={() => { onChange(draft); setEditing(false); }} />;
+  return <span style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 4, display: 'inline-block', width: w || '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', border: '1px solid transparent' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5'; e.currentTarget.style.borderColor = '#d9d9d9'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }} onClick={() => { setDraft(value); setEditing(true); }}>{value || <span style={{ color: '#ccc' }}>{placeholder || '点击编辑'}</span>}</span>;
+};
+
+const HoverNumber: React.FC<{ value: number; onChange: (v: number) => void; w?: number | string }> = ({ value, onChange, w }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  if (editing) return <InputNumber size="small" value={draft} autoFocus style={{ width: typeof w === 'number' ? w : (w || '100%') }} onChange={v => setDraft(v ?? 0)} onBlur={() => { onChange(draft); setEditing(false); }} onPressEnter={() => { onChange(draft); setEditing(false); }} />;
+  return <span style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 4, display: 'inline-block', width: typeof w === 'number' ? w : (w || '100%'), border: '1px solid transparent' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5'; e.currentTarget.style.borderColor = '#d9d9d9'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }} onClick={() => { setDraft(value); setEditing(true); }}>{value}</span>;
+};
+
+const HoverSelect: React.FC<{ value: string; onChange: (v: string) => void; options: Option[]; w?: number }> = ({ value, onChange, options, w }) => {
+  const [editing, setEditing] = useState(false);
+  const label = options.find(o => o.value === value)?.label || value;
+  if (editing) return <Select size="small" value={value} autoFocus style={{ width: w || 60 }} options={options} onChange={v => { onChange(v); setEditing(false); }} onBlur={() => setEditing(false)} />;
+  return <span style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 4, display: 'inline-block', textAlign: 'center', border: '1px solid transparent', fontWeight: 'bold', fontSize: 14 }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5'; e.currentTarget.style.borderColor = '#d9d9d9'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }} onClick={() => setEditing(true)}>{label}</span>;
+};
 
 // ==================== 组件 ====================
 
@@ -166,7 +201,6 @@ const RuleEditor: React.FC = () => {
   const isEdit = !!id;
   const [currentStep, setCurrentStep] = useState(0);
 
-  // 从URL参数判断类型: /rules/new?type=base → purchase, /rules/new?type=campaign → campaign
   const ruleType = searchParams.get('type') || 'base';
   const defaultCategory = ruleType === 'campaign' ? 'promo' : 'base';
 
@@ -178,20 +212,17 @@ const RuleEditor: React.FC = () => {
   const [effectiveFrom, setEffectiveFrom] = useState<string>('');
   const [effectiveTo, setEffectiveTo] = useState<string>('');
 
-  // ① 业务实体配置
-  const [selectedEntity, setSelectedEntity] = useState('ORDER');
+  // 触发条件
+  const [schemasByEntity, setSchemasByEntity] = useState<Record<string, SchemaField[]>>({});
   const [pointFormulas, setPointFormulas] = useState<PointFormula[]>([
-    { key: '1', pointType: 'REWARD', field: 'order_amount', multiplier: 1 },
-    { key: '2', pointType: 'TIER', field: 'order_amount', multiplier: 1 },
+    { key: '1', pointType: ruleType === 'tier' ? 'TIER' : 'REWARD', field: 'order_amount', multiplier: 1 },
   ]);
+  const [counters, setCounters] = useState<CounterItem[]>([]);
   const [tierFormulas, setTierFormulas] = useState<TierFormula[]>([
     { key: '1', tier: 'GOLD', pointType: 'REWARD', multiplier: 0.2 },
     { key: '2', tier: 'PLATINUM', pointType: 'REWARD', multiplier: 0.3 },
   ]);
-  const [schemaFields, setSchemaFields] = useState<SchemaField[]>([]);
-  const [editingCondIdx, setEditingCondIdx] = useState<number | null>(null);
 
-  // 字段条件
   const [extConditions, setExtConditions] = useState<ExtCondition[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
   const [memberTiers, setMemberTiers] = useState<string[]>(['GOLD']);
@@ -211,12 +242,12 @@ const RuleEditor: React.FC = () => {
   const [quantityTiers, setQuantityTiers] = useState<QuantityTier[]>([]);
   const [rewardPoints, setRewardPoints] = useState(10);
 
-  // ② 等级加成
+  // 等级加成
   const [tierBonuses, setTierBonuses] = useState<TierBonus[]>([
     { key: '1', tier: 'GOLD', bonus: 10 }, { key: '2', tier: 'PLATINUM', bonus: 20 },
   ]);
 
-  // ③ AI
+  // AI
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
@@ -232,13 +263,12 @@ const RuleEditor: React.FC = () => {
   const [manualDrl, setManualDrl] = useState('');
 
   // 动态选项
-  const [entityOptions, setEntityOptions] = useState<Option[]>([{ label: 'ORDER (订单事件)', value: 'ORDER' }, { label: 'BEHAVIOR (行为事件)', value: 'BEHAVIOR' }, { label: 'MEMBER (会员)', value: 'MEMBER' }]);
   const [pointTypeOptions, setPointTypeOptions] = useState<Option[]>([]);
   const [channelOptions, setChannelOptions] = useState<Option[]>([]);
   const [tierOptions, setTierOptions] = useState<Option[]>([]);
   const [tradeStatusOptions, setTradeStatusOptions] = useState<Option[]>([]);
 
-  // 编辑模式: 加载已有规则数据 + 恢复表单状态
+  // 编辑模式
   useEffect(() => {
     if (!id) return;
     api.get(`/admin/rules/${id}`).then(({ data }) => {
@@ -247,20 +277,18 @@ const RuleEditor: React.FC = () => {
       setRuleName(r.rule_name || '');
       setRuleCode(r.rule_code || '');
       setRuleCategory(r.rule_category || 'base');
-      // 从 metadata 恢复表单状态
       try {
         const meta = r.metadata ? (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata) : null;
         if (meta) {
-          if (meta.selectedEntity) setSelectedEntity(meta.selectedEntity);
           if (meta.pointFormulas) setPointFormulas(meta.pointFormulas);
           if (meta.tierFormulas) setTierFormulas(meta.tierFormulas);
           if (meta.extConditions) setExtConditions(meta.extConditions);
+          if (meta.counters) setCounters(meta.counters);
           if (meta.salience) setSalience(meta.salience);
           if (meta.effectiveFrom) setEffectiveFrom(meta.effectiveFrom);
           if (meta.effectiveTo) setEffectiveTo(meta.effectiveTo);
         }
       } catch (e) {}
-      // 加载 DRL 到脚本区
       if (r.drl_content) {
         setManualDrl(r.drl_content);
         setManualEdit(true);
@@ -269,35 +297,43 @@ const RuleEditor: React.FC = () => {
     }).catch(() => {});
   }, [id]);
 
-  // 加载 Schema + 选项
+  // 加载全部实体 Schema
   useEffect(() => {
-    api.get(`/schemas/${selectedEntity}`).then(({ data }) => {
-      const s = data?.data?.schema || data?.data;
-      setSchemaFields(Object.entries(s?.properties || {}).map(([k, v]: any) => ({
-        label: `${v.title || k} (${k})`, value: k, type: v.type || 'string', format: v.format, enumValues: v.enum,
-      })));
-      if (s?.properties?.trade_status?.enum) setTradeStatusOptions(s.properties.trade_status.enum.map((e: string) => ({ label: e, value: e })));
-    }).catch(() => {});
+    const loadSchemas = async () => {
+      const map: Record<string, SchemaField[]> = {};
+      for (const ent of ['ORDER', 'BEHAVIOR', 'MEMBER']) {
+        try {
+          const { data } = await api.get(`/schemas/${ent}`);
+          const s = data?.data?.schema || data?.data;
+          map[ent] = Object.entries(s?.properties || {}).map(([k, v]: any) => ({
+            label: `${v.title || k} (${k})`, value: k, type: v.type || 'string', format: v.format, enumValues: v.enum,
+          }));
+        } catch { map[ent] = []; }
+      }
+      setSchemasByEntity(map);
+    };
+    loadSchemas();
+
     api.get('/admin/tiers').then(({ data }) => {
       const d = data?.data;
-      if (d?.pointTypes?.length) setPointTypeOptions(d.pointTypes.map((p: any) => ({ label: p.name || p.typeCode, value: p.typeCode })));
+      if (d?.pointTypes?.length) setPointTypeOptions(d.pointTypes.filter((p: any) => ruleType === 'tier' ? p.tierRelevant : !p.tierRelevant).map((p: any) => ({ label: p.name || p.typeCode, value: p.typeCode, pointCategory: p.pointCategory })));
       if (d?.tiers?.length) setTierOptions(d.tiers.map((t: any) => ({ label: `${t.tierCode} (${t.tierName || ''})`, value: t.tierCode })));
     }).catch(() => {});
     api.get('/admin/cache/enums').then(({ data }) => {
       const enums = data?.data?.enums;
       if (enums?.channel?.length) setChannelOptions(enums.channel.map((c: any) => ({ label: c.enum_name || c.enum_code, value: c.enum_code })));
     }).catch(() => {});
-  }, [selectedEntity]);
+  }, []);
 
   const formData = useMemo(() => ({
-    ruleName, ruleCategory, salience, effectiveFrom, effectiveTo, selectedEntity, frequencyLimit,
+    ruleName, ruleCategory, salience, effectiveFrom, effectiveTo, frequencyLimit,
     channels, memberTiers, minAmount, tradeStatus, extConditions,
     calcMode, pointFormulas, floorPoints, maxPoints, perItemPoints, categoryWeights, quantityTiers,
-    rewardPoints, tierFormulas, campaignPointType, campaignReward, aiGeneratedDrl,
-  }), [ruleName, ruleCategory, salience, effectiveFrom, effectiveTo, selectedEntity, frequencyLimit,
+    rewardPoints, tierFormulas, campaignPointType, campaignReward, aiGeneratedDrl, counters,
+  }), [ruleName, ruleCategory, salience, effectiveFrom, effectiveTo, frequencyLimit,
     channels, memberTiers, minAmount, tradeStatus, extConditions,
     calcMode, pointFormulas, floorPoints, maxPoints, perItemPoints, categoryWeights, quantityTiers,
-    rewardPoints, tierFormulas, campaignPointType, campaignReward, aiGeneratedDrl]);
+    rewardPoints, tierFormulas, campaignPointType, campaignReward, aiGeneratedDrl, counters]);
 
   const drlCode = useMemo(() => manualEdit ? manualDrl : generateDrl(formData), [formData, manualEdit, manualDrl]);
 
@@ -315,7 +351,7 @@ const RuleEditor: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const meta = { selectedEntity, pointFormulas, tierFormulas, extConditions, salience, effectiveFrom, effectiveTo };
+      const meta = { pointFormulas, tierFormulas, extConditions, counters, salience, effectiveFrom, effectiveTo };
       const payload = { rule_code: ruleCode || `RULE_${Date.now()}`, rule_name: ruleName || '未命名规则', rule_category: ruleCategory, rule_type: 'DRL', drl_content: drlCode, status: 'DRAFT', metadata: meta };
       if (isEdit) await api.put(`/admin/rules/${id}`, payload); else await api.post('/admin/rules', payload);
       message.success('已保存草稿');
@@ -325,7 +361,7 @@ const RuleEditor: React.FC = () => {
     setPublishing(true);
     try {
       let ruleId = id ? Number(id) : null;
-      const meta = { selectedEntity, pointFormulas, tierFormulas, extConditions, salience, effectiveFrom, effectiveTo };
+      const meta = { pointFormulas, tierFormulas, extConditions, counters, salience, effectiveFrom, effectiveTo };
       const payload = { rule_code: ruleCode || `RULE_${Date.now()}`, rule_name: ruleName || '未命名规则', rule_category: ruleCategory, rule_type: 'DRL', drl_content: drlCode, metadata: meta };
       if (isEdit) await api.put(`/admin/rules/${id}`, payload); else { const { data } = await api.post('/admin/rules', payload); ruleId = data?.data?.id; }
       try {
@@ -341,223 +377,182 @@ const RuleEditor: React.FC = () => {
     try { await api.post(`/admin/rules/${id || '0'}/publish`, { forceOverride: true, reason: forceReason }); message.success('已强制发布'); setPublishModal({ open: false, level: '', report: null }); navigate('/rules'); } catch (e: any) { message.error(e?.message || '发布失败'); }
   };
 
-  // 渲染字段条件行
-  const renderFieldRow = (f: SchemaField) => {
-    const idx = extConditions.findIndex(c => c.field === f.value);
-    const c = idx >= 0 ? extConditions[idx] : null;
-    const isEditing = editingCondIdx === idx;
-    if (c && isEditing) {
-      return (
-        <div key={f.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', background: '#fffbe6', borderRadius: 4 }}>
-          <Tag color={f.type === 'number' ? 'blue' : f.type === 'string' ? 'green' : f.format ? 'orange' : 'default'} style={{ fontSize: 11, margin: 0, width: 50, textAlign: 'center' }}>{f.format === 'date-time' ? 'date' : f.type}</Tag>
-          <Text style={{ fontSize: 12, width: 130, flexShrink: 0 }}>{f.label}</Text>
-          <Select size="small" value={c.op} options={getOpsForField(f.type, f.format)} style={{ width: c.op?.startsWith('BETWEEN') ? 120 : 70 }}
-            onChange={v => { const n = [...extConditions]; n[idx] = { ...n[idx], op: v, value: '', valueEnd: '' }; setExtConditions(n); }} />
-          {c.op?.startsWith('BETWEEN') ? (
-            <Space size={4}>
-              {f.format === 'date-time' ? <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="起始" style={{ width: 150 }} value={c.value ? dayjs(c.value) : null} onChange={(d) => { const n = [...extConditions]; n[idx] = { ...n[idx], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} /> : <InputNumber size="small" placeholder="起始" style={{ width: 80 }} value={c.value ? Number(c.value) : undefined} onChange={v => { const n = [...extConditions]; n[idx] = { ...n[idx], value: String(v ?? '') }; setExtConditions(n); }} />}
-              <Text type="secondary">~</Text>
-              {f.format === 'date-time' ? <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="结束" style={{ width: 150 }} value={c.valueEnd ? dayjs(c.valueEnd) : null} onChange={(d) => { const n = [...extConditions]; n[idx] = { ...n[idx], valueEnd: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} /> : <InputNumber size="small" placeholder="结束" style={{ width: 80 }} value={c.valueEnd ? Number(c.valueEnd) : undefined} onChange={v => { const n = [...extConditions]; n[idx] = { ...n[idx], valueEnd: String(v ?? '') }; setExtConditions(n); }} />}
-            </Space>
-          ) : f.type === 'number' ? (
-            <InputNumber size="small" placeholder="数值" style={{ width: 100 }} value={c.value ? Number(c.value) : undefined} onChange={v => { const n = [...extConditions]; n[idx] = { ...n[idx], value: String(v ?? '') }; setExtConditions(n); }} onPressEnter={() => setEditingCondIdx(null)} />
-          ) : f.enumValues?.length ? (
-            <Select size="small" placeholder="选择" style={{ width: 140 }} value={c.value || undefined} options={f.enumValues.map(e => ({ label: e, value: e }))} onChange={v => { const n = [...extConditions]; n[idx] = { ...n[idx], value: v }; setExtConditions(n); setEditingCondIdx(null); }} />
-          ) : f.format === 'date-time' ? (
-            <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="选择" style={{ width: 170 }} value={c.value ? dayjs(c.value) : null} onChange={(d) => { const n = [...extConditions]; n[idx] = { ...n[idx], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); setEditingCondIdx(null); }} />
-          ) : (
-            <Input size="small" placeholder="输入值" style={{ width: 120 }} value={c.value} onChange={e => { const n = [...extConditions]; n[idx] = { ...n[idx], value: e.target.value }; setExtConditions(n); }} onPressEnter={() => setEditingCondIdx(null)} />
-          )}
-          <Button size="small" type="link" style={{ padding: 0 }} onClick={() => setEditingCondIdx(null)}>确定</Button>
-          <Button size="small" type="link" danger style={{ padding: 0 }} onClick={() => { setExtConditions(extConditions.filter((_, i) => i !== idx)); setEditingCondIdx(null); }}>×</Button>
-        </div>
-      );
-    }
-    return (
-      <div key={f.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
-        <Tag color={f.type === 'number' ? 'blue' : f.type === 'string' ? 'green' : f.format ? 'orange' : 'default'} style={{ fontSize: 11, margin: 0, width: 50, textAlign: 'center' }}>{f.format === 'date-time' ? 'date' : f.type}</Tag>
-        <Text style={{ fontSize: 12, width: 130, flexShrink: 0 }}>{f.label}</Text>
-        {c ? (
-          <>
-            <Tag style={{ fontSize: 11, margin: 0 }}>{c.op?.startsWith('BETWEEN') ? `${c.op === 'BETWEEN_EQ' ? '区间[含]' : '区间'} ${c.value || '?'}~${c.valueEnd || '?'}` : `${c.op} ${c.value}`}</Tag>
-            <Button size="small" type="link" style={{ padding: 0 }} icon={<EditOutlined style={{ fontSize: 13, color: '#595959' }} />} onClick={() => setEditingCondIdx(idx)} />
-            <Button size="small" type="link" danger style={{ padding: 0, fontSize: 11 }} onClick={() => setExtConditions(extConditions.filter((_, i) => i !== idx))}>×</Button>
-          </>
-        ) : f.type === 'array' ? (
-          <Text type="secondary" style={{ fontSize: 11 }}>(嵌套对象)</Text>
-        ) : (
-          <Button size="small" type="dashed" style={{ fontSize: 11, padding: '0 8px' }}
-            onClick={() => {
-              const newIdx = extConditions.length;
-              setExtConditions([...extConditions, { key: String(Date.now()), field: f.value, type: f.type, format: f.format, op: f.type === 'number' || f.format ? '>=' : '==', value: '' }]);
-              setEditingCondIdx(newIdx);
-            }}>+ 添加</Button>
-        )}
-      </div>
-    );
-  };
-
   const steps = [
     { title: '基础规则配置', icon: <SettingOutlined /> },
     { title: 'AI 活动', icon: <ThunderboltOutlined /> },
   ];
 
   const stepContent = [
-    // ① 业务实体配置
+    // 触发条件
     <div key="s0">
-      {/* 业务实体选择 — 全部展示，点击选中 */}
-      <div style={{ marginBottom: 12 }}>
-        <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>业务实体</Text>
-        <Space wrap>
-          {entityOptions.map(e => (
-            <Button key={e.value}
-              type={selectedEntity === e.value ? 'primary' : 'default'}
-              size="small"
-              onClick={() => { setSelectedEntity(e.value); }}
-            >
-              {e.label}
-            </Button>
-          ))}
-        </Space>
-      </div>
-
-      {/* 第三行: 选中实体属性 — 平铺展示，点击添加到条件列表 */}
-      <Card size="small" title={<Space><Tag color="blue">{selectedEntity}</Tag>可用属性</Space>}
-        extra={<Text type="secondary" style={{ fontSize: 11 }}>点击属性添加为条件</Text>}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {schemaFields.filter(f => f.type !== 'array').map(f => {
-            const added = extConditions.some(c => c.field === f.value && c.entity === selectedEntity);
+      <div style={{ background: '#fafafa', borderRadius: 6, padding: '10px 14px', marginBottom: 12, border: '1px solid #f0f0f0' }}>
+        <Text strong style={{ fontSize: 14, color: '#262626', marginBottom: 6, display: 'block' }}>触发条件</Text>
+        <div style={{ marginBottom: 8 }}>
+          {extConditions.map((c, i) => {
+            const condSchemas = schemasByEntity[c.entity || 'ORDER'] || [];
+            const fm = condSchemas.find((f: SchemaField) => f.value === c.field);
+            const attrOpts: Option[] = condSchemas.filter((f: SchemaField) => f.type !== 'array').map(f => ({ label: f.label, value: f.value }));
             return (
-              <Tag key={f.value}
-                style={{ cursor: 'pointer', fontSize: 12, padding: '2px 10px', border: added ? `1px solid ${f.format === 'date-time' ? '#fa8c16' : f.type === 'number' ? '#1677ff' : '#52c41a'}` : '1px dashed #d9d9d9', background: added ? '#f0f5ff' : '#fff' }}
-                color={added ? (f.type === 'number' ? 'blue' : f.type === 'string' ? 'green' : 'orange') : undefined}
-                onClick={() => {
-                  const exists = extConditions.findIndex(c => c.field === f.value);
-                  if (exists >= 0) {
-                    setEditingCondIdx(exists);
-                  } else {
-                    const newIdx = extConditions.length;
-                    setExtConditions([...extConditions, { key: String(Date.now()), field: f.value, type: f.type, format: f.format, entity: selectedEntity, op: f.type === 'number' || f.format ? '>=' : '==', value: '' }]);
-                    setEditingCondIdx(newIdx);
-                  }
-                }}
-              >
-                {added ? '✓ ' : '+ '}{f.label}
-              </Tag>
-            );
-          })}
-        </div>
-      </Card>
-
-      {/* 已添加的条件 — 按实体分组 */}
-      {extConditions.filter(c => c.field).length > 0 && (
-        <Card size="small" title={<Space><Tag color="green">{extConditions.filter(c => c.field).length}</Tag>已添加的条件</Space>} style={{ marginTop: 12 }}>
-          {(() => {
-            const grouped = new Map<string, ExtCondition[]>();
-            extConditions.filter(c => c.field).forEach(c => {
-              const ent = c.entity || 'OTHER';
-              if (!grouped.has(ent)) grouped.set(ent, []);
-              grouped.get(ent)!.push(c);
-            });
-            return Array.from(grouped.entries()).map(([entity, conds]) => (
-              <div key={entity} style={{ marginBottom: 8 }}>
-                <Tag color="blue" style={{ marginBottom: 4 }}>{entity}</Tag>
-                {conds.map((c, i) => {
-                  const globalIdx = extConditions.findIndex(x => x.key === c.key);
-                  const fm = schemaFields.find(f => f.value === c.field) || { label: c.field, value: c.field, type: c.type || 'string' } as SchemaField;
-                  const isEditing = editingCondIdx === globalIdx;
-            return (
-              <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: isEditing ? '6px 8px' : '4px 0', background: isEditing ? '#fffbe6' : 'transparent', borderRadius: 4, flexWrap: 'wrap' }}>
-                <Tag color={c.type === 'number' ? 'blue' : c.format === 'date-time' ? 'orange' : 'green'} style={{ margin: 0, flexShrink: 0 }}>{fm?.label || c.field}</Tag>
-                {isEditing ? (
+              <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', flexWrap: 'wrap' }}>
+                <Select size="small" value={c.entity || 'ORDER'} style={{ width: 130 }} showSearch
+                  options={ENTITY_OPTIONS}
+                  onChange={v => {
+                    const n = [...extConditions];
+                    n[i] = { key: c.key, entity: v, field: '', type: 'string', op: '==', value: '' };
+                    setExtConditions(n);
+                  }} />
+                <Select size="small" value={c.field || undefined} style={{ width: 160 }}
+                  placeholder="选择属性" showSearch optionFilterProp="label"
+                  options={attrOpts}
+                  onChange={v => {
+                    const n = [...extConditions];
+                    const sf = condSchemas.find((f: SchemaField) => f.value === v);
+                    n[i] = { ...n[i], field: v, type: sf?.type || 'string', format: sf?.format,
+                      op: sf?.type === 'number' || sf?.format ? '>=' : '==', value: '' };
+                    setExtConditions(n);
+                  }} />
+                {c.field ? (
                   <>
-                    <Select size="small" value={c.op} options={getOpsForField(c.type, c.format)} style={{ width: c.op?.startsWith('BETWEEN') ? 120 : 70 }}
+                    <Select size="small" value={c.op} style={{ width: c.op?.startsWith('BETWEEN') ? 110 : 70 }} showSearch
+                      options={getOpsForField(c.type, c.format)}
                       onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], op: v, value: '', valueEnd: '' }; setExtConditions(n); }} />
                     {c.op?.startsWith('BETWEEN') ? (
                       <Space size={4}>
-                        {c.format === 'date-time' ? <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="起始" style={{ width: 150 }} value={c.value ? dayjs(c.value) : null} onChange={(d) => { const n = [...extConditions]; n[i] = { ...n[i], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} /> : <InputNumber size="small" placeholder="起始" style={{ width: 80 }} value={c.value ? Number(c.value) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} />}
+                        <InputNumber size="small" placeholder="起始" style={{ width: 80 }} value={c.value ? Number(c.value) : undefined}
+                          onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} />
                         <Text type="secondary">~</Text>
-                        {c.format === 'date-time' ? <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" placeholder="结束" style={{ width: 150 }} value={c.valueEnd ? dayjs(c.valueEnd) : null} onChange={(d) => { const n = [...extConditions]; n[i] = { ...n[i], valueEnd: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} /> : <InputNumber size="small" placeholder="结束" style={{ width: 80 }} value={c.valueEnd ? Number(c.valueEnd) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], valueEnd: String(v ?? '') }; setExtConditions(n); }} />}
+                        <InputNumber size="small" placeholder="结束" style={{ width: 80 }} value={c.valueEnd ? Number(c.valueEnd) : undefined}
+                          onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], valueEnd: String(v ?? '') }; setExtConditions(n); }} />
                       </Space>
                     ) : c.type === 'number' ? (
-                      <InputNumber size="small" placeholder="数值" style={{ width: 100 }} value={c.value ? Number(c.value) : undefined} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} onPressEnter={() => setEditingCondIdx(null)} />
+                      <InputNumber size="small" placeholder="数值" style={{ width: 100 }} value={c.value ? Number(c.value) : undefined}
+                        onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: String(v ?? '') }; setExtConditions(n); }} />
                     ) : fm?.enumValues?.length ? (
-                      <Select size="small" style={{ width: 140 }} value={c.value || undefined} options={fm.enumValues.map(e => ({ label: e, value: e }))} onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: v }; setExtConditions(n); setEditingCondIdx(null); }} />
+                      <Select size="small" style={{ width: 140 }} value={c.value || undefined}
+                        options={fm.enumValues.map((e: string) => ({ label: e, value: e }))}
+                        onChange={v => { const n = [...extConditions]; n[i] = { ...n[i], value: v }; setExtConditions(n); }} />
                     ) : c.format === 'date-time' ? (
-                      <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" style={{ width: 170 }} value={c.value ? dayjs(c.value) : null} onChange={(d) => { const n = [...extConditions]; n[i] = { ...n[i], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); setEditingCondIdx(null); }} />
+                      <DatePicker size="small" showTime format="YYYY-MM-DD HH:mm:ss" style={{ width: 170 }}
+                        value={c.value ? dayjs(c.value) : null}
+                        onChange={(d: any) => { const n = [...extConditions]; n[i] = { ...n[i], value: d ? d.format('YYYY-MM-DD HH:mm:ss') : '' }; setExtConditions(n); }} />
                     ) : (
-                      <Input size="small" placeholder="输入值" style={{ width: 120 }} value={c.value} onChange={e => { const n = [...extConditions]; n[i] = { ...n[i], value: e.target.value }; setExtConditions(n); }} onPressEnter={() => setEditingCondIdx(null)} />
+                      <Input size="small" placeholder="输入值" style={{ width: 120 }} value={c.value}
+                        onChange={e => { const n = [...extConditions]; n[i] = { ...n[i], value: e.target.value }; setExtConditions(n); }} />
                     )}
-                    <Button size="small" type="link" onClick={() => setEditingCondIdx(null)}>确定</Button>
-                    <Button size="small" type="link" danger onClick={() => { setExtConditions(extConditions.filter((_, j) => j !== i)); setEditingCondIdx(null); }}>×</Button>
                   </>
-                ) : (
-                  <>
-                    <Text style={{ fontSize: 12 }}>{c.op?.startsWith('BETWEEN') ? `${c.op === 'BETWEEN_EQ' ? '区间[含]' : '区间'} ${c.value || '?'} ~ ${c.valueEnd || '?'}` : `${c.op} ${c.value || '(未设置)'}`}</Text>
-                    <Button size="small" type="link" style={{ padding: 0 }} icon={<EditOutlined style={{ fontSize: 13, color: '#595959' }} />} onClick={() => setEditingCondIdx(globalIdx)} />
-                    <Button size="small" type="link" style={{ padding: 0 }} icon={<DeleteOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />} onClick={() => setExtConditions(extConditions.filter((_, j) => j !== globalIdx))} />
-                  </>
-                )}
+                ) : null}
+                <Button size="small" type="text" style={{ padding: 0 }} icon={<span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', border: '1px solid #262626' }}><svg width="8" height="8" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L9 9M9 1L1 9" stroke="#262626" strokeWidth="1.5" strokeLinecap="round"/></svg></span>}
+                  onClick={() => setExtConditions(extConditions.filter((_, j) => j !== i))} />
               </div>
-            );})}
-            </div>
-          ));})()}
-        </Card>
-      )}
+            );
+          })}
+        </div>
+        <Button size="small" type="dashed" icon={<PlusOutlined />}
+          onClick={() => setExtConditions([...extConditions, { key: String(Date.now()), entity: 'ORDER', field: '', type: 'string', op: '==', value: '' }])}>
+          添加条件</Button>
+      </div>
 
       <Divider style={{ margin: '12px 0' }} />
 
-      {/* 俱乐部基础积分 */}
-      <Card size="small" title={<Space><Tag color="blue">基础积分</Tag>俱乐部基础规则</Space>}
+      {/* 基础积分 */}
+      <Card size="small" title={<Space><Tag color="blue">基础积分</Tag></Space>}
         extra={<Text type="secondary" style={{ fontSize: 11 }}>设置后不常变更</Text>}>
-        {pointFormulas.map((pf, i) => (
+        {pointFormulas.map((pf, i) => {
+              const isRecord = pointTypeOptions.find(o => o.value === pf.pointType)?.pointCategory === 'RECORD';
+              return (
               <Row gutter={6} key={pf.key} style={{ marginBottom: 4 }} align="middle">
                 <Col span={8}>
                   <Select size="small" value={pf.pointType} options={pointTypeOptions} style={{ width: '100%' }}
                     onChange={v => { const n = [...pointFormulas]; n[i] = { ...n[i], pointType: v }; setPointFormulas(n); }} />
                 </Col>
-                <Col span={2}><Text type="secondary" style={{ fontSize: 12 }}>=</Text></Col>
-                <Col span={6}>
-                  <Select size="small" value={pf.field} options={schemaFields.filter(f => f.type === 'number').map(f => ({ label: f.value, value: f.value }))} style={{ width: '100%' }}
-                    onChange={v => { const n = [...pointFormulas]; n[i] = { ...n[i], field: v }; setPointFormulas(n); }} />
-                </Col>
-                <Col span={2}><Text type="secondary" style={{ fontSize: 12 }}>×</Text></Col>
-                <Col span={4}>
-                  <InputNumber size="small" min={0.1} step={0.1} value={pf.multiplier} style={{ width: '100%' }}
-                    onChange={v => { const n = [...pointFormulas]; n[i] = { ...n[i], multiplier: v || 0 }; setPointFormulas(n); }} />
-                </Col>
-                <Col span={2}>
+                {isRecord ? (
+                  <>
+                    <Col span={2}><Text style={{ fontSize: 16, textAlign: 'center', display: 'block', color: '#262626' }}>=</Text></Col>
+                    <Col span={6}>
+                      <InputNumber size="small" min={0} value={pf.multiplier} style={{ width: '100%' }}
+                        onChange={v => { const n = [...pointFormulas]; n[i] = { ...n[i], multiplier: v || 0 }; setPointFormulas(n); }} />
+                    </Col>
+                    <Col span={2} />
+                    <Col span={4} />
+                  </>
+                ) : (
+                  <>
+                    <Col span={2}><Text style={{ fontSize: 16, textAlign: 'center', display: 'block', color: '#262626' }}>=</Text></Col>
+                    <Col span={6}>
+                      <Select size="small" value={pf.field} options={(schemasByEntity['ORDER'] || []).filter((f: SchemaField) => f.type === 'number').map((f: SchemaField) => ({ label: f.value, value: f.value }))} style={{ width: '100%' }}
+                        onChange={v => { const n = [...pointFormulas]; n[i] = { ...n[i], field: v }; setPointFormulas(n); }} />
+                    </Col>
+                    <Col span={2}><Text style={{ fontSize: 16, textAlign: 'center', display: 'block', color: '#262626' }}>×</Text></Col>
+                    <Col span={4}>
+                      <InputNumber size="small" min={0.1} step={0.1} value={pf.multiplier} style={{ width: '100%' }}
+                        onChange={v => { const n = [...pointFormulas]; n[i] = { ...n[i], multiplier: v || 0 }; setPointFormulas(n); }} />
+                    </Col>
+                  </>
+                )}
+                <Col span={2} style={{ textAlign: 'center' }}>
                   {pointFormulas.length > 1 && (
-                    <Button size="small" type="link" style={{ padding: 0 }} icon={<DeleteOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />}
+                    <Button size="small" type="link" style={{ padding: 0 }} icon={<span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', border: '1px solid #262626' }}><svg width="8" height="8" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L9 9M9 1L1 9" stroke="#262626" strokeWidth="1.5" strokeLinecap="round"/></svg></span>}
                       onClick={() => setPointFormulas(pointFormulas.filter((_, j) => j !== i))} />
                   )}
                 </Col>
               </Row>
-            ))}
-            <Button size="small" type="dashed" onClick={() => setPointFormulas([...pointFormulas, { key: String(Date.now()), pointType: 'REWARD', field: 'order_amount', multiplier: 1 }])}>
-              + 添加积分类型</Button>
+            );})}
+        {/* 计数器 */}
+        {counters.map((ct, i) => (
+          <Row gutter={6} key={ct.key} style={{ marginBottom: 4 }} align="middle">
+            <Col span={8}>
+              <Input size="small" value={ct.name} style={{ width: '100%' }} placeholder="变量名(英文)"
+                onChange={e => { const n = [...counters]; n[i] = { ...n[i], name: e.target.value.replace(/[^a-zA-Z0-9_]/g, '') }; setCounters(n); }} />
+            </Col>
+            <Col span={2} style={{ textAlign: 'center' }}>
+              <HoverSelect value={ct.operator}
+                onChange={v => { const n = [...counters]; n[i] = { ...n[i], operator: v as '+' | '-' }; setCounters(n); }}
+                options={[{ label: '+', value: '+' }, { label: '-', value: '-' }]} w={48} />
+            </Col>
+            <Col span={6}>
+              <InputNumber size="small" addonBefore="起始值" value={ct.startValue} style={{ width: '100%' }}
+                onChange={v => { const n = [...counters]; n[i] = { ...n[i], startValue: v ?? 0 }; setCounters(n); }} />
+            </Col>
+            <Col span={2} />
+            <Col span={4}>
+              <InputNumber size="small" addonBefore="跨度" value={ct.step} min={1} style={{ width: '100%' }}
+                onChange={v => { const n = [...counters]; n[i] = { ...n[i], step: v || 1 }; setCounters(n); }} />
+            </Col>
+            <Col span={2} style={{ textAlign: 'center' }}>
+              <Button size="small" type="link" style={{ padding: 0 }} icon={<span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', border: '1px solid #262626' }}><svg width="8" height="8" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L9 9M9 1L1 9" stroke="#262626" strokeWidth="1.5" strokeLinecap="round"/></svg></span>}
+                onClick={() => setCounters(counters.filter((_, j) => j !== i))} />
+            </Col>
+          </Row>
+        ))}
+        <Space style={{ marginTop: 4 }}>
+          <Button size="small" type="dashed" onClick={() => setPointFormulas([...pointFormulas, { key: String(Date.now()), pointType: 'REWARD', field: 'order_amount', multiplier: 1 }])}>
+            + 添加积分类型</Button>
+          <Button size="small" type="dashed" onClick={() => setCounters([...counters, { key: String(Date.now()), name: 'counter_1', operator: '+', startValue: 0, step: 1 }])}>
+            + 添加计数器</Button>
+        </Space>
       </Card>
 
+      {ruleType !== 'tier' && (<>
       {/* 等级奖励 */}
-      <Card size="small" title={<Space><Tag color="green">等级奖励</Tag>会员等级额外奖励</Space>} style={{ marginTop: 12 }}>
+      <Card size="small" title={<Space><Tag color="green">等级奖励</Tag></Space>} style={{ marginTop: 12 }}>
         {tierFormulas.map((tf, i) => (
           <Row gutter={6} key={tf.key} style={{ marginBottom: 4 }} align="middle">
             <Col span={5}>
               <Select size="small" value={tf.tier} options={tierOptions} style={{ width: '100%' }}
                 onChange={v => { const n = [...tierFormulas]; n[i] = { ...n[i], tier: v }; setTierFormulas(n); }} />
             </Col>
-            <Col span={2}><Text type="secondary" style={{ fontSize: 12 }}>→</Text></Col>
+            <Col span={2}><Text style={{ fontSize: 16, textAlign: 'center', display: 'block', color: '#262626' }}>→</Text></Col>
             <Col span={7}>
               <Select size="small" value={tf.pointType} options={pointTypeOptions} style={{ width: '100%' }}
                 onChange={v => { const n = [...tierFormulas]; n[i] = { ...n[i], pointType: v }; setTierFormulas(n); }} />
             </Col>
-            <Col span={2}><Text type="secondary" style={{ fontSize: 12 }}>×</Text></Col>
+            <Col span={2}><Text style={{ fontSize: 16, textAlign: 'center', display: 'block', color: '#262626' }}>×</Text></Col>
             <Col span={5}>
               <InputNumber size="small" min={0.1} step={0.1} value={tf.multiplier} style={{ width: '100%' }}
                 onChange={v => { const n = [...tierFormulas]; n[i] = { ...n[i], multiplier: v || 0 }; setTierFormulas(n); }} />
             </Col>
-            <Col span={3}>
-              <Button size="small" type="link" style={{ padding: 0 }} icon={<DeleteOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />}
+            <Col span={3} style={{ textAlign: 'center' }}>
+              <Button size="small" type="link" style={{ padding: 0 }} icon={<span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', border: '1px solid #262626' }}><svg width="8" height="8" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L9 9M9 1L1 9" stroke="#262626" strokeWidth="1.5" strokeLinecap="round"/></svg></span>}
                 onClick={() => setTierFormulas(tierFormulas.filter((_, j) => j !== i))} />
             </Col>
           </Row>
@@ -565,6 +560,7 @@ const RuleEditor: React.FC = () => {
         <Button size="small" type="dashed" onClick={() => setTierFormulas([...tierFormulas, { key: String(Date.now()), tier: 'SILVER', pointType: pointFormulas[0]?.pointType || 'REWARD', multiplier: 0.1 }])}>
           + 添加等级奖励</Button>
       </Card>
+      </>)}
 
       </div>,
 
@@ -586,9 +582,9 @@ const RuleEditor: React.FC = () => {
   return (
     <PageWrapper>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>{isEdit ? `编辑规则 #${id}` : '新建规则'}</Title>
+        <Title level={4} style={{ margin: 0 }}>{isEdit ? `编辑规则 #${id}` : (ruleType === 'tier' ? '新建等级积分规则' : '新建积分规则')}</Title>
         <Space>
-          <Button onClick={() => navigate('/rules')}>取消</Button>
+          <Button onClick={() => navigate(ruleType === 'tier' ? '/rules/tier' : '/rules')}>取消</Button>
           <Button icon={<SaveOutlined />} onClick={handleSave} loading={saving}>保存草稿</Button>
           <Button type="primary" icon={<SendOutlined />} loading={publishing} onClick={handlePublish}>发布</Button>
         </Space>

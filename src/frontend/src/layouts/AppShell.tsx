@@ -33,17 +33,17 @@ const menuItems: MenuItemType[] = [
   {
     key: 'tier-rule', icon: <CrownOutlined />, label: '规则引擎',
     children: [
-      { key: 'rule-list', icon: <SettingOutlined />, label: '规则列表', path: '/rules' },
+      { key: 'rule-list', icon: <SettingOutlined />, label: '积分规则', path: '/rules' },
+      { key: 'tier-rule-list', icon: <CrownOutlined />, label: '等级规则', path: '/rules/tier' },
       { key: 'rule-ai', icon: <RobotOutlined />, label: 'AI 规则助手', path: '/rules/ai' },
-      { key: 'tier-rule-config', icon: <CrownOutlined />, label: '等级规则', path: '/rules/tier' },
       { key: 'flow-designer', icon: <ApartmentOutlined />, label: '流程设计器', path: '/flow-designer' },
     ],
   },
   {
     key: 'settings', icon: <SettingOutlined />, label: '设置',
     children: [
-      { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers' },
       { key: 'points-grant', icon: <DollarOutlined />, label: '积分类型', path: '/points/grant' },
+      { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers' },
       { key: 'channel-list', icon: <ApiOutlined />, label: '渠道列表', path: '/channels' },
       { key: 'scripting', icon: <CodeOutlined />, label: '脚本工作台', path: '/channels/scripting' },
       { key: 'roles', icon: <SafetyCertificateOutlined />, label: '角色权限', path: '/system/roles' },

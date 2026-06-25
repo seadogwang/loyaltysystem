@@ -10,6 +10,7 @@ import com.loyalty.platform.domain.repository.MemberAccountRepository;
 import com.loyalty.platform.domain.repository.PointTypeDefinitionRepository;
 import com.loyalty.platform.domain.repository.ProgramRepository;
 import com.loyalty.platform.domain.repository.RuleDefinitionRepository;
+import com.loyalty.platform.domain.repository.TierActivityRepository;
 import com.loyalty.platform.domain.repository.TierDefinitionRepository;
 import com.loyalty.platform.flow.EventContext;
 import com.loyalty.platform.activity.StepCycleCalculator;
@@ -55,6 +56,7 @@ public class AdminController {
     private final ProgramRepository programRepo;
     private final PointTypeDefinitionRepository pointTypeRepo;
     private final TierDefinitionRepository tierRepo;
+    private final TierActivityRepository tierActivityRepo;
     private final PointGrantService pointGrantService;
     private final SystemCacheService cacheService;
     private final RuleDefinitionRepository ruleRepo;
@@ -72,6 +74,7 @@ public class AdminController {
                            ProgramRepository programRepo,
                            PointTypeDefinitionRepository pointTypeRepo,
                            TierDefinitionRepository tierRepo,
+                           TierActivityRepository tierActivityRepo,
                            PointGrantService pointGrantService,
                            SystemCacheService cacheService,
                            RuleDefinitionRepository ruleRepo,
@@ -88,6 +91,7 @@ public class AdminController {
         this.programRepo = programRepo;
         this.pointTypeRepo = pointTypeRepo;
         this.tierRepo = tierRepo;
+        this.tierActivityRepo = tierActivityRepo;
         this.pointGrantService = pointGrantService;
         this.cacheService = cacheService;
         this.ruleRepo = ruleRepo;
@@ -331,6 +335,90 @@ public class AdminController {
         result.put("tiers", tierList);
         result.put("pointTypes", ptList);
         return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    // ==================== 等级直升活动 ====================
+
+    @GetMapping("/tier-activities")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> listTierActivities() {
+        String pc = TenantContext.getRequired();
+        List<TierActivity> activities = tierActivityRepo.findAllByProgramCode(pc);
+        List<Map<String, Object>> list = activities.stream().map(this::tierActivityToMap).collect(Collectors.toList());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("activities", list);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @PostMapping("/tier-activities")
+    @Transactional
+    public ResponseEntity<ApiResponse<Map<String, Object>>> createTierActivity(
+            @RequestBody Map<String, Object> body) {
+        String pc = TenantContext.getRequired();
+        String activityCode = (String) body.get("activityCode");
+        if (activityCode == null || activityCode.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("ERR_INVALID", "activityCode 不能为空"));
+        }
+
+        TierActivity activity = TierActivity.builder()
+                .programCode(pc)
+                .activityCode(activityCode)
+                .activityName((String) body.getOrDefault("activityName", activityCode))
+                .targetTierCode((String) body.get("targetTierCode"))
+                .triggerType((String) body.getOrDefault("triggerType", "MANUAL"))
+                .triggerConfig(getMap(body, "triggerConfig"))
+                .validStartTime(parseDateTime((String) body.get("validStartTime")))
+                .validEndTime(parseDateTime((String) body.get("validEndTime")))
+                .oncePerMember(body.containsKey("oncePerMember") ? (Boolean) body.get("oncePerMember") : true)
+                .memberScope((String) body.getOrDefault("memberScope", "ALL"))
+                .status("DRAFT")
+                .description((String) body.get("description"))
+                .build();
+
+        tierActivityRepo.save(activity);
+        log.info("[Admin] 等级直升活动创建: code={}, name={}", activityCode, activity.getActivityName());
+        return ResponseEntity.ok(ApiResponse.success(tierActivityToMap(activity)));
+    }
+
+    @PutMapping("/tier-activities/{activityCode}")
+    @Transactional
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateTierActivity(
+            @PathVariable String activityCode, @RequestBody Map<String, Object> body) {
+        String pc = TenantContext.getRequired();
+        TierActivity activity = tierActivityRepo.findByProgramCodeAndActivityCode(pc, activityCode).orElse(null);
+        if (activity == null) {
+            return ResponseEntity.ok(ApiResponse.error("ERR_NOT_FOUND", "活动不存在"));
+        }
+
+        if (body.containsKey("activityName")) activity.setActivityName((String) body.get("activityName"));
+        if (body.containsKey("targetTierCode")) activity.setTargetTierCode((String) body.get("targetTierCode"));
+        if (body.containsKey("triggerType")) activity.setTriggerType((String) body.get("triggerType"));
+        if (body.containsKey("triggerConfig")) activity.setTriggerConfig(getMap(body, "triggerConfig"));
+        if (body.containsKey("validStartTime")) activity.setValidStartTime(parseDateTime((String) body.get("validStartTime")));
+        if (body.containsKey("validEndTime")) activity.setValidEndTime(parseDateTime((String) body.get("validEndTime")));
+        if (body.containsKey("oncePerMember")) activity.setOncePerMember((Boolean) body.get("oncePerMember"));
+        if (body.containsKey("memberScope")) activity.setMemberScope((String) body.get("memberScope"));
+        if (body.containsKey("description")) activity.setDescription((String) body.get("description"));
+        activity.setUpdatedAt(LocalDateTime.now());
+
+        tierActivityRepo.save(activity);
+        log.info("[Admin] 等级直升活动更新: code={}", activityCode);
+        return ResponseEntity.ok(ApiResponse.success(tierActivityToMap(activity)));
+    }
+
+    @PostMapping("/tier-activities/{activityCode}/publish")
+    @Transactional
+    public ResponseEntity<ApiResponse<Map<String, Object>>> publishTierActivity(
+            @PathVariable String activityCode) {
+        String pc = TenantContext.getRequired();
+        TierActivity activity = tierActivityRepo.findByProgramCodeAndActivityCode(pc, activityCode).orElse(null);
+        if (activity == null) {
+            return ResponseEntity.ok(ApiResponse.error("ERR_NOT_FOUND", "活动不存在"));
+        }
+        activity.setStatus("ACTIVE");
+        activity.setUpdatedAt(LocalDateTime.now());
+        tierActivityRepo.save(activity);
+        log.info("[Admin] 等级直升活动发布: code={}", activityCode);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("activityCode", activityCode, "status", "ACTIVE")));
     }
 
     // ==================== 授信额度管理 (Ch4.4) ====================
@@ -1390,6 +1478,7 @@ public class AdminController {
                             .build());
 
             if (pt.containsKey("name")) entity.setTypeName((String) pt.get("name"));
+            if (pt.containsKey("pointCategory")) entity.setPointCategory((String) pt.get("pointCategory"));
             if (pt.containsKey("redeemable")) entity.setIsRedeemable((Boolean) pt.get("redeemable"));
             if (pt.containsKey("tierRelevant")) entity.setIsTierCalc((Boolean) pt.get("tierRelevant"));
             if (pt.containsKey("transferable")) entity.setIsTransferable((Boolean) pt.get("transferable"));
@@ -1460,6 +1549,7 @@ public class AdminController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("typeCode", pt.getTypeCode());
         m.put("name", pt.getTypeName());
+        m.put("pointCategory", pt.getPointCategory());
         m.put("redeemable", pt.getIsRedeemable());
         m.put("tierRelevant", pt.getIsTierCalc());
         m.put("transferable", pt.getIsTransferable());
@@ -1485,5 +1575,39 @@ public class AdminController {
         if (v instanceof Number) return BigDecimal.valueOf(((Number) v).doubleValue());
         if (v instanceof String) try { return new BigDecimal((String) v); } catch (NumberFormatException e) { return BigDecimal.ZERO; }
         return BigDecimal.ZERO;
+    }
+
+    private Map<String, Object> tierActivityToMap(TierActivity a) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", a.getId());
+        m.put("activityCode", a.getActivityCode());
+        m.put("activityName", a.getActivityName());
+        m.put("targetTierCode", a.getTargetTierCode());
+        m.put("triggerType", a.getTriggerType());
+        m.put("triggerConfig", a.getTriggerConfig());
+        m.put("validStartTime", a.getValidStartTime() != null ? a.getValidStartTime().toString() : null);
+        m.put("validEndTime", a.getValidEndTime() != null ? a.getValidEndTime().toString() : null);
+        m.put("oncePerMember", a.getOncePerMember());
+        m.put("memberScope", a.getMemberScope());
+        m.put("status", a.getStatus());
+        m.put("description", a.getDescription());
+        return m;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getMap(Map<String, Object> body, String key) {
+        Object val = body.get(key);
+        if (val instanceof Map) return (Map<String, Object>) val;
+        return new LinkedHashMap<>();
+    }
+
+    private LocalDateTime parseDateTime(String s) {
+        if (s == null || s.isBlank()) return null;
+        try {
+            return LocalDateTime.parse(s.replace("T", " ").substring(0, 19),
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        } catch (Exception e) {
+            return LocalDateTime.now();
+        }
     }
 }

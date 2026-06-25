@@ -68,7 +68,7 @@ const RuleList: React.FC = () => {
   const tabItems = [
     {
       key: 'base',
-      label: <Space><SettingOutlined />俱乐部基础规则</Space>,
+      label: <Space><SettingOutlined />积分基础规则</Space>,
       children: (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -125,7 +125,7 @@ const RuleList: React.FC = () => {
 
   return (
     <PageWrapper loading={loading} error={error} onRetry={fetchRules}>
-      <Title level={4} style={{ marginBottom: 16 }}>规则管理</Title>
+      <Title level={4} style={{ marginBottom: 16 }}>积分规则管理</Title>
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
     </PageWrapper>
   );

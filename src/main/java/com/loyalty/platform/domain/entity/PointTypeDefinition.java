@@ -13,6 +13,8 @@ public class PointTypeDefinition {
     @Column(name = "program_code", nullable = false, length = 100) private String programCode;
     @Column(name = "type_code", nullable = false, length = 50) private String typeCode;
     @Column(name = "type_name", length = 100) private String typeName;
+    // 新增：积分分类 (ASSET / CONTRIBUTION / RECORD)
+    @Column(name = "point_category", length = 20) @Builder.Default private String pointCategory = "ASSET";
     @Column(name = "is_redeemable") @Builder.Default private Boolean isRedeemable = true;
     @Column(name = "is_tier_calc") @Builder.Default private Boolean isTierCalc = false;
     @Column(name = "is_transferable") @Builder.Default private Boolean isTransferable = false;

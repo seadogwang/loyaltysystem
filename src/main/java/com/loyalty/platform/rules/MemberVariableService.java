@@ -2,13 +2,18 @@ package com.loyalty.platform.rules;
 
 import com.loyalty.platform.domain.entity.Member;
 import com.loyalty.platform.domain.entity.MemberAccount;
+import com.loyalty.platform.domain.entity.PointTypeDefinition;
+import com.loyalty.platform.domain.repository.AccountTransactionRepository;
 import com.loyalty.platform.domain.repository.MemberAccountRepository;
 import com.loyalty.platform.domain.repository.MemberRepository;
+import com.loyalty.platform.domain.repository.PointTypeDefinitionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,10 +36,16 @@ public class MemberVariableService {
 
     private final MemberRepository memberRepo;
     private final MemberAccountRepository accountRepo;
+    private final PointTypeDefinitionRepository pointTypeRepo;
+    private final AccountTransactionRepository txRepo;
 
-    public MemberVariableService(MemberRepository memberRepo, MemberAccountRepository accountRepo) {
+    public MemberVariableService(MemberRepository memberRepo, MemberAccountRepository accountRepo,
+                                  PointTypeDefinitionRepository pointTypeRepo,
+                                  AccountTransactionRepository txRepo) {
         this.memberRepo = memberRepo;
         this.accountRepo = accountRepo;
+        this.pointTypeRepo = pointTypeRepo;
+        this.txRepo = txRepo;
     }
 
     /**
@@ -69,31 +80,48 @@ public class MemberVariableService {
     }
 
     /**
-     * 获取会员等级积分（TIER 账户余额）。
+     * 获取会员等级积分 — 所有 is_tier_calc=true 的积分类型余额汇总。
      *
-     * <p>TIER_POINTS = totalAccrued - totalRedeemed - totalExpired
+     * <p>等级积分 = Σ(每个 is_tier_calc 积分类型的 totalAccrued - totalRedeemed - totalExpired)
      *
      * @param programCode 租户代码
      * @param memberId    会员 ID
-     * @return 等级积分余额
+     * @return 等级积分汇总值
      */
     public BigDecimal getTierPoints(String programCode, Long memberId) {
-        MemberAccount tierAccount = accountRepo.findByMemberIdAndType(programCode, memberId, "TIER_POINTS")
-                .orElse(null);
+        // 查询所有 is_tier_calc = true 的积分类型
+        List<PointTypeDefinition> tierCalcTypes = pointTypeRepo.findByProgramCodeAndStatus(programCode, "ACTIVE")
+                .stream()
+                .filter(pt -> Boolean.TRUE.equals(pt.getIsTierCalc()))
+                .toList();
 
-        if (tierAccount == null) {
-            log.debug("[Variable] TIER 账户不存在: member={}", memberId);
+        if (tierCalcTypes.isEmpty()) {
+            log.debug("[Variable] 无 is_tier_calc 积分类型: program={}", programCode);
             return BigDecimal.ZERO;
         }
 
-        BigDecimal accrued = tierAccount.getTotalAccrued() != null ? tierAccount.getTotalAccrued() : BigDecimal.ZERO;
-        BigDecimal redeemed = tierAccount.getTotalRedeemed() != null ? tierAccount.getTotalRedeemed() : BigDecimal.ZERO;
-        BigDecimal expired = tierAccount.getTotalExpired() != null ? tierAccount.getTotalExpired() : BigDecimal.ZERO;
+        // 获取会员所有账户
+        List<MemberAccount> accounts = accountRepo.findAllByMemberId(programCode, memberId);
 
-        BigDecimal balance = accrued.subtract(redeemed).subtract(expired);
-        log.debug("[Variable] TIER_POINTS: member={}, accrued={}, redeemed={}, expired={}, balance={}",
-                memberId, accrued, redeemed, expired, balance);
-        return balance;
+        BigDecimal total = BigDecimal.ZERO;
+        for (PointTypeDefinition pt : tierCalcTypes) {
+            MemberAccount account = accounts.stream()
+                    .filter(a -> pt.getTypeCode().equals(a.getAccountType()))
+                    .findFirst().orElse(null);
+
+            if (account != null) {
+                BigDecimal accrued = account.getTotalAccrued() != null ? account.getTotalAccrued() : BigDecimal.ZERO;
+                BigDecimal redeemed = account.getTotalRedeemed() != null ? account.getTotalRedeemed() : BigDecimal.ZERO;
+                BigDecimal expired = account.getTotalExpired() != null ? account.getTotalExpired() : BigDecimal.ZERO;
+                BigDecimal balance = accrued.subtract(redeemed).subtract(expired);
+                total = total.add(balance);
+                log.debug("[Variable] 等级积分 {}: accrued={}, redeemed={}, expired={}, balance={}",
+                        pt.getTypeCode(), accrued, redeemed, expired, balance);
+            }
+        }
+
+        log.debug("[Variable] 等级积分汇总: member={}, total={}", memberId, total);
+        return total;
     }
 
     /**
@@ -102,7 +130,13 @@ public class MemberVariableService {
      * @param dimension 评估维度代码 (TIER_POINTS / ORDER_COUNT / TOTAL_AMOUNT 等)
      * @return 维度值
      */
-    public BigDecimal getDimensionValue(String programCode, Long memberId, String dimension) {
+    public BigDecimal getDimensionValue(String programCode, Long memberId, String dimension, Integer windowDays) {
+        // 先检查是否是已知的积分类型代码（如 TIER, PURCHASE_COUNT, BEHAVIOR_POINTS）
+        PointTypeDefinition pt = pointTypeRepo.findByProgramCodeAndTypeCode(programCode, dimension).orElse(null);
+        if (pt != null && Boolean.TRUE.equals(pt.getIsTierCalc())) {
+            return getPointTypeAccrualInWindow(programCode, memberId, dimension, windowDays);
+        }
+
         switch (dimension) {
             case "TIER_POINTS":
                 return getTierPoints(programCode, memberId);
@@ -120,5 +154,23 @@ public class MemberVariableService {
                 log.warn("[Variable] 未知评估维度: {}", dimension);
                 return BigDecimal.ZERO;
         }
+    }
+
+    /**
+     * 获取指定积分类型在时间窗口内的 ACCRUAL 累计值。
+     * 查询 account_transaction 流水表，按评估周期过滤。
+     */
+    private BigDecimal getPointTypeAccrualInWindow(String programCode, Long memberId, String accountType, Integer windowDays) {
+        LocalDateTime since = windowDays != null && windowDays > 0
+                ? LocalDateTime.now().minusDays(windowDays)
+                : LocalDateTime.of(2000, 1, 1, 0, 0); // 无窗口限制则查全部
+        BigDecimal sum = txRepo.sumAccrualSince(programCode, memberId, accountType, since);
+        log.debug("[Variable] 积分类型 {} 在{}天内的累计: {}", accountType, windowDays, sum);
+        return sum;
+    }
+
+    // 保留原有方法（兼容无窗口参数调用）
+    public BigDecimal getDimensionValue(String programCode, Long memberId, String dimension) {
+        return getDimensionValue(programCode, memberId, dimension, null);
     }
 }

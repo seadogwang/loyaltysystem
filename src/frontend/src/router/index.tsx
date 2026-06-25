@@ -23,8 +23,11 @@ const PointsAccounts = lazy(() => import('../pages/PointsAccounts'));
 const PointsTransactions = lazy(() => import('../pages/PointsTransactions'));
 const PointsGrant = lazy(() => import('../pages/PointsGrant'));
 const PointsRedeem = lazy(() => import('../pages/PointsRedeem'));
-const TierRuleConfig = lazy(() => import('../pages/TierRuleConfig'));
+const TierConfig = lazy(() => import('../pages/TierConfig'));
 const RuleList = lazy(() => import('../pages/RuleList'));
+const TierRuleConfig = lazy(() => import('../pages/TierRuleConfig'));
+const TierRuleList = lazy(() => import('../pages/TierRuleList'));
+const TierActivityEditor = lazy(() => import('../pages/TierActivityEditor'));
 const RuleEditor = lazy(() => import('../pages/RuleEditor'));
 const PromoEditor = lazy(() => import('../pages/PromoEditor'));
 const SandboxTest = lazy(() => import('../pages/SandboxTest'));
@@ -160,12 +163,20 @@ export const router = createBrowserRouter([
 
       // 等级与规则
       {
-        path: 'rules/tier',
+        path: 'tiers',
+        element: <SuspenseWrapper><AuthGuard><TierConfig /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'rules/tier/config',
         element: <SuspenseWrapper><AuthGuard><TierRuleConfig /></AuthGuard></SuspenseWrapper>,
       },
       {
-        path: 'tiers',
-        element: <Navigate to="/rules/tier" replace />,
+        path: 'rules/tier/activity/new',
+        element: <SuspenseWrapper><AuthGuard><TierActivityEditor /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'rules/tier',
+        element: <SuspenseWrapper><AuthGuard><TierRuleList /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules',

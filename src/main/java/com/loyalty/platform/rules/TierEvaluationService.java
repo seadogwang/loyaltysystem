@@ -1,6 +1,7 @@
 package com.loyalty.platform.rules;
 
 import com.loyalty.platform.common.event.EventBridge;
+import com.loyalty.platform.common.util.ExpiryCalculator;
 import com.loyalty.platform.domain.entity.*;
 import com.loyalty.platform.domain.repository.*;
 import com.loyalty.platform.rules.MemberVariableService;
@@ -116,7 +117,8 @@ public class TierEvaluationService {
 
         String dimension = (String) eval.get("dimension");
         String operator = (String) eval.getOrDefault("operator", "AND");
-        BigDecimal actualValue = variableService.getDimensionValue(programCode, memberId, dimension);
+        Integer windowDays = eval.get("timeWindowDays") instanceof Number n ? n.intValue() : null;
+        BigDecimal actualValue = variableService.getDimensionValue(programCode, memberId, dimension, windowDays);
         BigDecimal requiredValue = toBigDecimal(eval.get("required_value"));
 
         boolean mainCondition = evaluateComparison(actualValue, eval.getOrDefault("op", ">=").toString(), requiredValue);
@@ -126,7 +128,7 @@ public class TierEvaluationService {
         if (extraConditions != null) {
             for (Map<String, Object> cond : extraConditions) {
                 String condDim = (String) cond.get("dimension");
-                BigDecimal condValue = variableService.getDimensionValue(programCode, memberId, condDim);
+                BigDecimal condValue = variableService.getDimensionValue(programCode, memberId, condDim, windowDays);
                 BigDecimal condRequired = toBigDecimal(cond.get("value"));
                 String condOp = (String) cond.getOrDefault("operator", ">=");
                 if (!evaluateComparison(condValue, condOp, condRequired)) return false;
@@ -155,7 +157,11 @@ public class TierEvaluationService {
 
     private void performTierUpgrade(Member member, String targetTier, String reason, String triggerEventId) {
         String oldTier = member.getTierCode();
-        if (oldTier.equals(targetTier)) return;
+        if (oldTier.equals(targetTier)) {
+            // 同等级直升：延长有效期
+            extendTierValidity(member, reason);
+            return;
+        }
         member.setTierCode(targetTier);
         memberRepo.save(member);
         tierLogRepo.save(TierChangeLog.builder()
@@ -163,6 +169,32 @@ public class TierEvaluationService {
                 .fromTier(oldTier).toTier(targetTier)
                 .changeReason(reason).changedAt(LocalDateTime.now()).build());
         log.info("[TierEval] 会员 {} 升级: {} → {}", member.getMemberId(), oldTier, targetTier);
+    }
+
+    /**
+     * 同等级直升：延长有效期。等级不变，有效期重置为当前时间 + 配置的周期。
+     */
+    private void extendTierValidity(Member member, String reason) {
+        // 从 tier_definition 读取有效期配置
+        TierDefinition tierDef = tierRepo.findByProgramCodeAndTierCode(
+                member.getProgramCode(), member.getTierCode()).orElse(null);
+        if (tierDef != null && tierDef.getUpgradeCriteria() != null) {
+            String mode = (String) tierDef.getUpgradeCriteria().getOrDefault("validity_mode", "CALENDAR_YEARS");
+            Integer value = (Integer) tierDef.getUpgradeCriteria().getOrDefault("validity_value", 1);
+            if (value != null && value > 0) {
+                LocalDateTime newExpiry = ExpiryCalculator.calculateExpiry(LocalDateTime.now(), mode, value);
+                member.setTierExpiresAt(newExpiry);
+                log.info("[TierEval] 会员 {} 等级续期: {}, 新有效期: {}", member.getMemberId(), member.getTierCode(), newExpiry);
+            }
+        }
+        member.setTierEffectiveFrom(LocalDateTime.now());
+        member.setUpdatedAt(LocalDateTime.now());
+        memberRepo.save(member);
+        // 记录续期日志
+        tierLogRepo.save(TierChangeLog.builder()
+                .programCode(member.getProgramCode()).memberId(member.getMemberId())
+                .fromTier(member.getTierCode()).toTier(member.getTierCode())
+                .changeReason("RENEWAL").changedAt(LocalDateTime.now()).build());
     }
 
     private void performTierDowngrade(Member member, String targetTier, String reason, String triggerEventId) {

@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.QueryHint;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -33,4 +34,7 @@ public interface MemberAccountRepository extends BaseRepository<MemberAccount, L
     Optional<MemberAccount> findByMemberIdAndType(@Param("pc") String programCode,
                                                    @Param("mid") Long memberId,
                                                    @Param("atype") String accountType);
+
+    @Query("SELECT a FROM MemberAccount a WHERE a.programCode = :pc AND a.memberId = :mid")
+    List<MemberAccount> findAllByMemberId(@Param("pc") String programCode, @Param("mid") Long memberId);
 }

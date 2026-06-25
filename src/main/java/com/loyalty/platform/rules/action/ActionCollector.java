@@ -62,6 +62,13 @@ public class ActionCollector {
         add(new DowngradeTierAction(memberId, newTier, reason, ruleId, snapshotId));
     }
 
+    /** 便捷方法：计数器递增/递减 */
+    public void incrementCounter(String programCode, String memberId, String counterName,
+                                  String operator, double step, double startValue,
+                                  String ruleId, String snapshotId) {
+        add(new IncrementCounterAction(programCode, memberId, counterName, operator, step, startValue, ruleId, snapshotId));
+    }
+
     /** 获取收集到的所有动作 */
     public List<Action> getActions() {
         return List.copyOf(actions);

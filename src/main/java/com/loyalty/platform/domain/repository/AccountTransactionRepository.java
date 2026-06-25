@@ -101,4 +101,16 @@ public interface AccountTransactionRepository extends BaseRepository<AccountTran
             + "ORDER BY t.expiresAt ASC NULLS LAST, t.createdAt ASC")
     List<AccountTransaction> findRepayableForMember(@Param("pc") String programCode,
                                                      @Param("mid") Long memberId);
+
+    /**
+     * 统计指定积分类型在时间窗口内的 ACCRUAL 累计值。
+     */
+    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM AccountTransaction t "
+            + "WHERE t.programCode = :pc AND t.memberId = :mid AND t.accountType = :atype "
+            + "AND t.transactionType = 'ACCRUAL' AND t.status = 'ACTIVE' "
+            + "AND t.createdAt >= :since")
+    BigDecimal sumAccrualSince(@Param("pc") String programCode,
+                               @Param("mid") Long memberId,
+                               @Param("atype") String accountType,
+                               @Param("since") LocalDateTime since);
 }
