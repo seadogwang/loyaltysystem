@@ -140,6 +140,27 @@ src/main/java/com/loyalty/platform/
 - **KieBase Draft Compilation** — `buildKieBaseWithDraft()` for shadow sandbox
 - **AI Rule Assistant V4** — Conversational AI with streaming SSE, clarification forms, dynamic formSchema, multi-scenario (base/promo/tiered/cyclic)
 
+### v7.4 — Campaign Tools (New)
+
+**Campaign Tools** is a full-stack marketing planning & execution platform integrated with Loyalty. 12 modules, 27+ Flyway migrations, 100+ new files.
+
+| Module | Description | Key API |
+|--------|-------------|---------|
+| **Planning Workspace** | Workspace → Goal → Initiative → Portfolio hierarchy | `/api/campaign/workspace` |
+| **Opportunity Intelligence** | ML + RFM + external signal driven opportunity discovery | `/api/campaign/opportunity/discover` |
+| **Marketing Decision Engine** | Budget allocation, attention budget, conflict arbitration, prioritization | `/api/campaign/decision/execute` |
+| **Simulation & Optimization** | 3-layer simulation (Exposure→Behavior→Conversion), genetic algorithm optimization | `/api/campaign/simulation/run` |
+| **Execution Engine (Zeebe)** | BPMN deploy, process start, worker execution, pause/resume | `/api/campaign/execution` |
+| **Event System + Feedback Loop** | 13 event types, feedback metrics, model drift detection, strategy adjustment | `/api/campaign/feedback` |
+| **Canvas → BPMN Compiler** | DAG JSON → Zeebe BPMN XML, semantic validation, AI DAG generation | `/api/campaign/canvas` |
+| **Node Config Schema** | 12 node types with JSON Schema, pluggable NodeHandler framework | `/api/campaign/nodes` |
+| **Content & Compliance** | Asset management, approval workflow, variable rendering, audit trail | `/api/campaign/content` |
+| **Human Intervention** | Pause/resume/cancel, node skip, emergency throttle, kill switch | `/api/campaign/intervention` |
+| **End-to-End Runtime** | Execution master/step/user-detail tracking, 10-state machine | `/api/campaign/execution` |
+
+**Frontend Pages:** 11 dedicated campaign pages under `/campaign/*`
+- Workspace List/Detail, Opportunity Intelligence, Decision Engine, Simulation & Optimization, Canvas Editor, Execution Monitor, Content Management, Intervention Dashboard, Feedback Analysis
+
 ### Screenshots
 
 | Rule Configuration | Rule Engine Update |

@@ -51,6 +51,18 @@ const TenantAudit = lazy(() => import('../pages/TenantAudit'));
 const AIRuleAssistant = lazy(() => import('../pages/AIRuleAssistant'));
 const LlmConfig = lazy(() => import('../pages/LlmConfig'));
 
+// Campaign 营销管理
+const CampaignWorkspaceList = lazy(() => import('../pages/campaign/CampaignWorkspaceList'));
+const CampaignWorkspaceDetail = lazy(() => import('../pages/campaign/CampaignWorkspaceDetail'));
+const DecisionEnginePage = lazy(() => import('../pages/campaign/DecisionEnginePage'));
+const SimulationOptimizationPage = lazy(() => import('../pages/campaign/SimulationOptimizationPage'));
+const CampaignCanvasEditor = lazy(() => import('../pages/campaign/CampaignCanvasEditor'));
+const ContentManagementPage = lazy(() => import('../pages/campaign/ContentManagementPage'));
+const InterventionDashboard = lazy(() => import('../pages/campaign/InterventionDashboard'));
+const ExecutionMonitor = lazy(() => import('../pages/campaign/ExecutionMonitor'));
+const FeedbackAnalysisPage = lazy(() => import('../pages/campaign/FeedbackAnalysisPage'));
+const OpportunityIntelligencePage = lazy(() => import('../pages/campaign/OpportunityIntelligencePage'));
+
 // ==================== 加载占位 ====================
 
 const PageLoading = () => (
@@ -209,6 +221,52 @@ export const router = createBrowserRouter([
       {
         path: 'flow-designer',
         element: <SuspenseWrapper><AuthGuard><FlowDesigner /></AuthGuard></SuspenseWrapper>,
+      },
+
+      // ====== Campaign 营销管理 ======
+      {
+        path: 'campaign/workspaces',
+        element: <SuspenseWrapper><AuthGuard><CampaignWorkspaceList /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/workspace/:workspaceId',
+        element: <SuspenseWrapper><AuthGuard><CampaignWorkspaceDetail /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/decision',
+        element: <SuspenseWrapper><AuthGuard><DecisionEnginePage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/simulation',
+        element: <SuspenseWrapper><AuthGuard><SimulationOptimizationPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/canvas/:planId',
+        element: <SuspenseWrapper><AuthGuard><CampaignCanvasEditor /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/canvas/new',
+        element: <SuspenseWrapper><AuthGuard><CampaignCanvasEditor /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/content',
+        element: <SuspenseWrapper><AuthGuard><ContentManagementPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/intervention',
+        element: <SuspenseWrapper><AuthGuard><InterventionDashboard /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/execution',
+        element: <SuspenseWrapper><AuthGuard><ExecutionMonitor /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/feedback',
+        element: <SuspenseWrapper><AuthGuard><FeedbackAnalysisPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/opportunity',
+        element: <SuspenseWrapper><AuthGuard><OpportunityIntelligencePage /></AuthGuard></SuspenseWrapper>,
       },
 
       // API 配置管理

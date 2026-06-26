@@ -7,6 +7,7 @@ import {
   CodeOutlined, AuditOutlined, BellOutlined,
   SettingOutlined, UserOutlined, LogoutOutlined, ApartmentOutlined,
   SafetyCertificateOutlined, FileTextOutlined, WarningOutlined, RobotOutlined,
+  BarChartOutlined, ProjectOutlined, ThunderboltOutlined, BranchesOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '../store';
 
@@ -37,6 +38,20 @@ const menuItems: MenuItemType[] = [
       { key: 'tier-rule-list', icon: <CrownOutlined />, label: '等级规则', path: '/rules/tier' },
       { key: 'rule-ai', icon: <RobotOutlined />, label: 'AI 规则助手', path: '/rules/ai' },
       { key: 'flow-designer', icon: <ApartmentOutlined />, label: '流程设计器', path: '/flow-designer' },
+    ],
+  },
+  {
+    key: 'campaign', icon: <BarChartOutlined />, label: '营销管理',
+    children: [
+      { key: 'campaign-workspace-list', icon: <ProjectOutlined />, label: '营销工作区', path: '/campaign/workspaces' },
+      { key: 'campaign-decision', icon: <ThunderboltOutlined />, label: '决策引擎', path: '/campaign/decision' },
+      { key: 'campaign-canvas', icon: <BranchesOutlined />, label: '画布编辑器', path: '/campaign/canvas/new' },
+      { key: 'campaign-content', icon: <SafetyCertificateOutlined />, label: '内容合规', path: '/campaign/content' },
+      { key: 'campaign-intervention', icon: <WarningOutlined />, label: '干预中心', path: '/campaign/intervention' },
+      { key: 'campaign-execution', icon: <ApartmentOutlined />, label: '执行引擎', path: '/campaign/execution' },
+      { key: 'campaign-opportunity', icon: <ThunderboltOutlined />, label: '机会智能', path: '/campaign/opportunity' },
+      { key: 'campaign-simulation', icon: <BarChartOutlined />, label: '模拟优化', path: '/campaign/simulation' },
+      { key: 'campaign-feedback', icon: <BellOutlined />, label: '反馈闭环', path: '/campaign/feedback' },
     ],
   },
   {
