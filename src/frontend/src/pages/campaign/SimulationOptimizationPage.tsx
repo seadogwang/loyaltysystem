@@ -272,7 +272,7 @@ const SimulationOptimizationPage: React.FC = () => {
                     {optResult.allocationDetails?.length > 0 && (
                       <Card title="预算分配" size="small">
                         <BudgetAllocationChart
-                          allocations={optResult.allocationDetails.map(a => ({
+                          allocations={(optResult.allocationDetails || []).map(a => ({
                             initiativeId: a.initiativeId,
                             initiativeName: a.initiativeName,
                             allocatedBudget: a.allocatedBudget,

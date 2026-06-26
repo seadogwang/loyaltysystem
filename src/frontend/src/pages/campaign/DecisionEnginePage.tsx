@@ -311,7 +311,7 @@ const DecisionEnginePage: React.FC = () => {
 
                     {execResult.allocations?.length > 0 && (
                       <Card title="执行优先级" size="small" style={{ marginTop: 16 }}>
-                        <Table dataSource={execResult.allocations} rowKey="initiativeId" size="small" pagination={false}
+                        <Table dataSource={execResult.allocations || []} rowKey="initiativeId" size="small" pagination={false}
                           columns={[
                             { title: '#', dataIndex: 'executionOrder', key: 'executionOrder', width: 40 },
                             { title: 'Initiative', dataIndex: 'initiativeName', key: 'initiativeName', render: (n: string) => <Text strong>{n}</Text> },
@@ -415,7 +415,7 @@ const DecisionEnginePage: React.FC = () => {
                       </Descriptions.Item>
                       <Descriptions.Item label="分配活动数">{allocationResult.allocations?.length}</Descriptions.Item>
                     </Descriptions>
-                    <Table dataSource={allocationResult.allocations} rowKey="candidateId" size="small"
+                    <Table dataSource={allocationResult.allocations || []} rowKey="candidateId" size="small"
                       columns={allocationColumns} pagination={false} />
                   </Card>
                 )}

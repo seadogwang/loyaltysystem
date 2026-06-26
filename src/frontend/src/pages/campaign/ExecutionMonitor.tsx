@@ -135,7 +135,7 @@ const ExecutionMonitor: React.FC = () => {
               {instance?.executionHistory?.length > 0 && (
                 <Col span={24}>
                   <Card size="small" title="执行记录">
-                    <Table dataSource={instance.executionHistory} rowKey="id" size="small" pagination={false}
+                    <Table dataSource={instance.executionHistory || []} rowKey="id" size="small" pagination={false}
                       columns={[
                         { title: 'Job 类型', dataIndex: 'jobType', key: 'jobType', render: (t: string) => <Tag>{t}</Tag> },
                         { title: '时间', dataIndex: 'executedAt', key: 'executedAt', render: (t: string) => t ? new Date(t).toLocaleTimeString() : '-' },
