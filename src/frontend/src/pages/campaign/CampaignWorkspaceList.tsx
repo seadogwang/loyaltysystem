@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Card, Table, Button, Space, Tag, Input, Select, Modal, message, Typography, Tooltip,
+  Card, Table, Button, Space, Tag, Input, Modal, message, Typography, Tooltip,
 } from 'antd';
 import {
   PlusOutlined, SearchOutlined, RightOutlined, EditOutlined,
@@ -131,17 +131,10 @@ const CampaignWorkspaceList: React.FC = () => {
   return (
     <div style={{ padding: 24 }}>
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
-          <div>
-            <Title level={4} style={{ margin: 0 }}>📊 营销工作区</Title>
-            <Text type="secondary">管理营销活动的战略规划与执行</Text>
-          </div>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/campaign/workspaces/new')}>
-            新建工作区
-          </Button>
-        </div>
+        <Title level={4} style={{ margin: 0, marginBottom: 4 }}>📊 营销工作区</Title>
+        <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>管理营销活动的战略规划与执行</Text>
 
-        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16, justifyContent: 'space-between' }}>
           <Input
             placeholder="搜索工作区..."
             prefix={<SearchOutlined />}
@@ -150,6 +143,9 @@ const CampaignWorkspaceList: React.FC = () => {
             style={{ width: 300 }}
             allowClear
           />
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/campaign/workspaces/new')}>
+            新建工作区
+          </Button>
         </div>
 
         <Table
