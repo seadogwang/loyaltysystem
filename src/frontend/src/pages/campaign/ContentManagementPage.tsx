@@ -208,7 +208,7 @@ const ContentManagementPage: React.FC = () => {
           <Form.Item name="bodyText" label="正文内容" rules={[{ required: true }]}>
             <TextArea rows={8} placeholder="支持模板变量: {{会员名}} {{积分}} {{优惠券码}}" />
           </Form.Item>
-          <Text type="secondary">模板变量语法：<Tag>{{变量名}}</Tag> 将在发送时被替换</Text>
+          <Text type="secondary">模板变量语法：<code>{'{{变量名}}'}</code> 将在发送时被替换</Text>
         </Form>
       </Modal>
 

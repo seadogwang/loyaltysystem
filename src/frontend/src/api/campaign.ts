@@ -439,6 +439,29 @@ export async function rollbackDecision(decisionId: string, reason?: string) {
 
 // ==================== Canvas DAG API ====================
 
+export interface CampaignPlan {
+  id: string;
+  workspaceId: string;
+  goalId: string;
+  initiativeId: string;
+  name: string;
+  description: string;
+  status: string;
+  totalBudget: number;
+  expectedRoi: number;
+  strategyJson: string;
+  allocationJson: string;
+  graphJson: string;
+  forecastJson: string;
+  zeebeProcessId: string;
+  zeebeVersion: number;
+  zeebeInstanceKey: number;
+  createdBy: string;
+  approvedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CanvasNode {
   id: string;
   type: string;
