@@ -378,7 +378,6 @@ const CampaignWorkspaceDetail: React.FC = () => {
           </Tag>
         </div>
         <Descriptions size="small" style={{ marginTop: 16 }} column={3}>
-          <Descriptions.Item label="Program">{workspace.programCode}</Descriptions.Item>
           <Descriptions.Item label="关联目标">
             {activeGoal ? <Text strong>{activeGoal.name}</Text> : <Text type="secondary">未设置</Text>}
           </Descriptions.Item>

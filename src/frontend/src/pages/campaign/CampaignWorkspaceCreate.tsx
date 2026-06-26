@@ -57,12 +57,6 @@ const CampaignWorkspaceCreate: React.FC = () => {
             <Input placeholder="例如：618大促、Q3会员运营" size="large" />
           </Form.Item>
 
-          <Form.Item label="关联 Program">
-            <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>{currentProgramCode}</Tag>
-            <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-              工作区将自动关联到当前 Program
-            </Text>
-          </Form.Item>
 
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={4} placeholder="描述工作区的用途和目标" />

@@ -20,7 +20,6 @@ const CampaignWorkspaceList: React.FC = () => {
   const [workspaces, setWorkspaces] = useState<CampaignWorkspace[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [programFilter, setProgramFilter] = useState<string>(currentProgramCode);
 
   const fetchWorkspaces = useCallback(async () => {
     setLoading(true);
@@ -66,15 +65,9 @@ const CampaignWorkspaceList: React.FC = () => {
     return <Tag color={s.color}>{s.text}</Tag>;
   };
 
-  const filtered = workspaces.filter(w => {
-    const matchSearch = !searchText ||
-      w.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      w.programCode.toLowerCase().includes(searchText.toLowerCase());
-    const matchProgram = programFilter === 'all' || w.programCode === programFilter;
-    return matchSearch && matchProgram;
-  });
-
-  const programOptions = Array.from(new Set(workspaces.map(w => w.programCode)));
+  const filtered = workspaces
+    .filter(w => w.programCode === currentProgramCode)
+    .filter(w => !searchText || w.name.toLowerCase().includes(searchText.toLowerCase()));
 
   const columns = [
     {
@@ -82,17 +75,8 @@ const CampaignWorkspaceList: React.FC = () => {
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record: CampaignWorkspace) => (
-        <Space>
-          <Text strong>{name}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>({record.programCode})</Text>
-        </Space>
+        <Text strong>{name}</Text>
       ),
-    },
-    {
-      title: 'Program',
-      dataIndex: 'programCode',
-      key: 'programCode',
-      width: 120,
     },
     {
       title: '当前目标',
@@ -165,15 +149,6 @@ const CampaignWorkspaceList: React.FC = () => {
             onChange={e => setSearchText(e.target.value)}
             style={{ width: 300 }}
             allowClear
-          />
-          <Select
-            value={programFilter}
-            onChange={setProgramFilter}
-            style={{ width: 160 }}
-            options={[
-              { label: '全部 Program', value: 'all' },
-              ...programOptions.map(p => ({ label: p, value: p })),
-            ]}
           />
         </div>
 
