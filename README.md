@@ -177,6 +177,116 @@ src/main/java/com/loyalty/platform/
 
 ---
 
+---
+## Campaign Tools (营销活动工具)
+
+Campaign Tools is an **AI-powered marketing campaign management platform** built on top of the Loyalty platform. It provides end-to-end campaign lifecycle management from strategic planning to execution monitoring and feedback learning.
+
+### Key Features
+
+**1. Planning (战略规划)**
+- Hierarchical structure: Workspace → Goal → Initiative → Portfolio
+- Full status lifecycle: DRAFT → ACTIVE → PAUSED → COMPLETED → ARCHIVED
+- Portfolio budget optimization with greedy algorithm
+
+**2. Opportunity Intelligence (机会智能)**
+- Dual-engine hybrid: internal data (RFM + ML) + external signals (AI skills)
+- 4 AI skills: CompetitorMonitor, SocialListening, RegulatoryWatch, InventoryRisk
+- Configurable scoring dimensions with adjustable weights (churn/uplift/conversion/RFM)
+- Real-time external signal impact weighting
+
+**3. Marketing Decision Engine (决策引擎)**
+- Budget allocation with ROI-prioritized greedy algorithm
+- Channel capacity constraints and attention budget management
+- Conflict arbitration and priority ordering
+- What-if simulation and scenario comparison
+
+**4. Simulation & Optimization (模拟优化)**
+- Baseline conversion rate calculation from historical data
+- Three-layer simulation model: exposure → behavior → conversion
+- Greedy and genetic algorithm optimization
+- What-if scenario comparison
+
+**5. Canvas Flow Editor (画布编辑器)**
+- 13+ node types: AUDIENCE_FILTER, CONDITION, SEND_EMAIL/SMS/PUSH, OFFER_POINTS/COUPON, AI_SCORE, etc.
+- Floating draggable palette with collapsible nodes by category
+- SVG icons, 48×48 nodes, rounded corners, hover-reveal handles (4-direction)
+- Visual DAG design with drag-and-drop, click-to-add, and edge condition editing
+- AI-powered DAG generation from natural language descriptions
+
+**6. Dynamic Audience Filtering (动态人群筛选)**
+- Industry-agnostic: no pre-aggregated fields, users define their own metrics
+- Condition types: DYNAMIC_STAT (real-time SQL aggregation) + STATIC_ATTR (member attributes)
+- Configurable: data source, aggregation function, time window, operator, value
+- Real-time query: all conditions based on NOW(), no pre-computed labels
+- Blacklist exclusion and result limit
+
+**7. Content & Compliance (内容合规)**
+- Multi-channel content management: EMAIL, SMS, PUSH
+- Approval workflow with version history
+- Variable-based personalization rendering
+- Content validation and compliance checks
+
+**8. Execution Engine (执行引擎)**
+- Zeebe workflow engine integration
+- 11 worker types: audience-filter, ai-score, send-email/sms/push, offer-points/coupon, etc.
+- Deploy, start, pause, resume, cancel operations
+- Real-time execution monitoring with status tracking
+
+**9. Feedback Loop (反馈闭环)**
+- Prediction vs actual comparison (ROI, conversion, revenue)
+- Model drift detection and strategy adjustment
+- Event collection and feature store updates
+- Continuous learning: execute → collect → learn → optimize
+
+**10. Human Intervention (人工干预)**
+- Runtime campaign control: pause, resume, cancel
+- Node-level control: skip, retry, override config
+- Emergency throttle and kill switch
+- Complete audit trail for all intervention operations
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Campaign Tools (com.loyalty.platform.campaign)             │
+│                                                             │
+│  Planning ──→ Opportunity ──→ Decision ──→ Simulation      │
+│     │              │              │             │            │
+│     └──────────────┼──────────────┼─────────────┘            │
+│                    ▼              ▼                          │
+│              Canvas Editor ──→ Execution (Zeebe)            │
+│                    │              │                          │
+│                    └──────┬───────┘                          │
+│                           ▼                                  │
+│              Content ──→ Event ──→ Feedback                 │
+│                                                             │
+│  Human Intervention (global control layer)                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Frontend | React 18, TypeScript, Ant Design 5, @xyflow/react |
+| Workflow Engine | Zeebe 8.5 (embedded for dev) |
+| AI/ML | LLM integration (DeepSeek/Bailian), ML scoring (XGBoost/LightGBM) |
+| Database | PostgreSQL 15+ (JSONB, native queries) |
+| Event System | Kafka (production) / EventBridge |
+
+### UI Standards
+
+All 10 Campaign pages follow a unified design system:
+- Page padding: 4px top, 24px sides
+- Title: 24px bold, description hidden with hover tooltip
+- Back button: right-aligned, type="text"
+- Cards: 12px gap, 12px body padding
+- Tables: 14px font, nowrap + ellipsis, 13px bold headers
+- Action buttons: right-aligned above tables
+
+---
+
 ## 中文
 
 ### 概述
