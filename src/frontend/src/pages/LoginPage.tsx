@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Typography, message, Spin } from 'antd';
 import { useAppStore } from '../store';
+import api from '../api';
 
 const { Title, Text } = Typography;
 
@@ -139,16 +140,37 @@ const LoginPage: React.FC = () => {
     setLoading(true);
     setError('');
 
-    // 开发模式：直接登录，不调用后端
-    setTimeout(() => {
+    try {
+      const { data } = await api.post('/auth/login', {
+        username,
+        password,
+        programCode: sessionStorage.getItem('current_program_code') || 'PROG001',
+      });
+
+      if (data.code !== 'SUCCESS') {
+        setError(data.message || '登录失败');
+        setLoading(false);
+        return;
+      }
+
+      const { token, user, permissions } = data.data;
+      sessionStorage.setItem('auth_token', token);
       setUser(
-        { userId: 'dev', username, displayName: '管理员' },
-        ['*'],
+        {
+          userId: String(user.userId),
+          username: user.username,
+          displayName: user.displayName || user.username,
+        },
+        permissions || [],
       );
       message.success('登录成功');
       setLoading(false);
       navigate('/onboarding');
-    }, 600);
+    } catch (e: any) {
+      const msg = e.response?.data?.message || '登录失败，请检查用户名和密码';
+      setError(msg);
+      setLoading(false);
+    }
   };
 
   const inputStyle = (name: string): React.CSSProperties => ({
@@ -219,7 +241,7 @@ const LoginPage: React.FC = () => {
 
         <div style={{ textAlign: 'center', marginTop: 24 }}>
           <Text style={{ fontSize: 12, color: '#bbb' }}>
-            默认账号: admin / admin123
+            默认账号: superadmin / admin123
           </Text>
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
   BarChartOutlined, ProjectOutlined, ThunderboltOutlined, BranchesOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '../store';
+import api from '../api';
 
 const { Header, Content, Footer } = Layout;
 const { Text } = Typography;
@@ -21,51 +22,74 @@ interface MenuItemType {
   icon: React.ReactNode;
   label: string;
   path?: string;
+  requiredPermission?: string;
   children?: MenuItemType[];
+}
+
+/** 根据用户权限过滤菜单（含 '*' 通配符显示全部） */
+function filterMenuByPermissions(items: MenuItemType[], permissions: string[]): MenuItemType[] {
+  if (permissions.includes('*')) return items;
+  return items
+    .filter(item => !item.requiredPermission || permissions.includes(item.requiredPermission))
+    .map(item => ({
+      ...item,
+      children: item.children ? filterMenuByPermissions(item.children, permissions) : undefined,
+    }))
+    .filter(item => item.children === undefined || item.children.length > 0);
 }
 
 const menuItems: MenuItemType[] = [
   {
-    key: 'member', icon: <TeamOutlined />, label: '会员服务',
+    key: 'member', icon: <TeamOutlined />, label: '会员服务', requiredPermission: 'MEMBER_READ',
     children: [
-      { key: 'member-list', icon: <TeamOutlined />, label: '会员列表', path: '/members' },
+      { key: 'member-list', icon: <TeamOutlined />, label: '会员列表', path: '/members', requiredPermission: 'MEMBER_READ' },
     ],
   },
   {
-    key: 'tier-rule', icon: <CrownOutlined />, label: '规则引擎',
+    key: 'tier-rule', icon: <CrownOutlined />, label: '规则引擎', requiredPermission: 'RULE_READ',
     children: [
-      { key: 'rule-list', icon: <SettingOutlined />, label: '积分规则', path: '/rules' },
-      { key: 'tier-rule-list', icon: <CrownOutlined />, label: '等级规则', path: '/rules/tier' },
-      { key: 'rule-ai', icon: <RobotOutlined />, label: 'AI 规则助手', path: '/rules/ai' },
-      { key: 'flow-designer', icon: <ApartmentOutlined />, label: '流程设计器', path: '/flow-designer' },
+      { key: 'rule-list', icon: <SettingOutlined />, label: '积分规则', path: '/rules', requiredPermission: 'RULE_READ' },
+      { key: 'tier-rule-list', icon: <CrownOutlined />, label: '等级规则', path: '/rules/tier', requiredPermission: 'RULE_READ' },
+      { key: 'rule-ai', icon: <RobotOutlined />, label: 'AI 规则助手', path: '/rules/ai', requiredPermission: 'RULE_READ' },
+      { key: 'flow-designer', icon: <ApartmentOutlined />, label: '流程设计器', path: '/flow-designer', requiredPermission: 'RULE_WRITE' },
     ],
   },
   {
-    key: 'campaign', icon: <BarChartOutlined />, label: '营销管理',
+    key: 'campaign', icon: <BarChartOutlined />, label: '营销管理', requiredPermission: 'RULE_READ',
     children: [
-      { key: 'campaign-workspace-list', icon: <ProjectOutlined />, label: '营销工作区', path: '/campaign/workspaces' },
-      { key: 'campaign-decision', icon: <ThunderboltOutlined />, label: '决策引擎', path: '/campaign/decision' },
-      { key: 'campaign-canvas', icon: <BranchesOutlined />, label: '画布编辑器', path: '/campaign/canvas/new' },
-      { key: 'campaign-content', icon: <SafetyCertificateOutlined />, label: '内容合规', path: '/campaign/content' },
-      { key: 'campaign-intervention', icon: <WarningOutlined />, label: '干预中心', path: '/campaign/intervention' },
-      { key: 'campaign-execution', icon: <ApartmentOutlined />, label: '执行引擎', path: '/campaign/execution' },
-      { key: 'campaign-opportunity', icon: <ThunderboltOutlined />, label: '机会智能', path: '/campaign/opportunity' },
-      { key: 'campaign-simulation', icon: <BarChartOutlined />, label: '模拟优化', path: '/campaign/simulation' },
-      { key: 'campaign-feedback', icon: <BellOutlined />, label: '反馈闭环', path: '/campaign/feedback' },
+      { key: 'campaign-workspace-list', icon: <ProjectOutlined />, label: '营销工作区', path: '/campaign/workspaces', requiredPermission: 'RULE_READ' },
+      { key: 'campaign-decision', icon: <ThunderboltOutlined />, label: '决策引擎', path: '/campaign/decision', requiredPermission: 'RULE_READ' },
+      { key: 'campaign-canvas', icon: <BranchesOutlined />, label: '画布编辑器', path: '/campaign/canvas/new', requiredPermission: 'RULE_WRITE' },
+      { key: 'campaign-content', icon: <SafetyCertificateOutlined />, label: '内容合规', path: '/campaign/content', requiredPermission: 'RULE_READ' },
+      { key: 'campaign-intervention', icon: <WarningOutlined />, label: '干预中心', path: '/campaign/intervention', requiredPermission: 'RULE_WRITE' },
+      { key: 'campaign-execution', icon: <ApartmentOutlined />, label: '执行引擎', path: '/campaign/execution', requiredPermission: 'RULE_READ' },
+      { key: 'campaign-opportunity', icon: <ThunderboltOutlined />, label: '机会智能', path: '/campaign/opportunity', requiredPermission: 'RULE_READ' },
+      { key: 'campaign-simulation', icon: <BarChartOutlined />, label: '模拟优化', path: '/campaign/simulation', requiredPermission: 'RULE_READ' },
+      { key: 'campaign-feedback', icon: <BellOutlined />, label: '反馈闭环', path: '/campaign/feedback', requiredPermission: 'AUDIT_READ' },
+      { key: 'campaign-strategy', icon: <ThunderboltOutlined />, label: '策略蓝图', path: '/campaign/strategy-blueprint', requiredPermission: 'RULE_READ' },
+
+      { key: 'campaign-budget', icon: <DollarOutlined />, label: '预算节奏', path: '/campaign/budget-pacing', requiredPermission: 'RULE_READ' },
+      { key: 'campaign-calendar', icon: <BarChartOutlined />, label: '活动日历', path: '/campaign/calendar', requiredPermission: 'RULE_READ' },
+      { key: 'campaign-dlq', icon: <WarningOutlined />, label: '死信队列', path: '/campaign/dlq', requiredPermission: 'AUDIT_READ' },
+      { key: 'campaign-webhook', icon: <ApiOutlined />, label: 'Webhook 监控', path: '/campaign/webhook', requiredPermission: 'CHANNEL_READ' },
+      { key: 'campaign-consent', icon: <SafetyCertificateOutlined />, label: '偏好管理', path: '/campaign/consent', requiredPermission: 'MEMBER_WRITE' },
+      { key: 'campaign-sharing', icon: <ApartmentOutlined />, label: '共享管理', path: '/campaign/sharing', requiredPermission: 'TENANT_WRITE' },
+      { key: 'campaign-recommendation', icon: <RobotOutlined />, label: '推荐管理', path: '/campaign/recommendation', requiredPermission: 'RULE_READ' },
     ],
   },
   {
-    key: 'settings', icon: <SettingOutlined />, label: '设置',
+    key: 'settings', icon: <SettingOutlined />, label: '设置', requiredPermission: 'TENANT_READ',
     children: [
-      { key: 'points-grant', icon: <DollarOutlined />, label: '积分类型', path: '/points/grant' },
-      { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers' },
-      { key: 'channel-list', icon: <ApiOutlined />, label: '渠道列表', path: '/channels' },
-      { key: 'scripting', icon: <CodeOutlined />, label: '脚本工作台', path: '/channels/scripting' },
-      { key: 'roles', icon: <SafetyCertificateOutlined />, label: '角色权限', path: '/system/roles' },
-      { key: 'logs', icon: <FileTextOutlined />, label: '操作日志', path: '/system/logs' },
-      { key: 'spi-logs', icon: <AuditOutlined />, label: 'SPI 日志', path: '/system/spi-logs' },
-      { key: 'audit', icon: <WarningOutlined />, label: '租户审计', path: '/system/audit' },
-      { key: 'llm-config', icon: <RobotOutlined />, label: '大模型配置', path: '/system/llm-config' },
+      { key: 'points-grant', icon: <DollarOutlined />, label: '积分类型', path: '/points/grant', requiredPermission: 'POINTS_GRANT' },
+      { key: 'tier-config', icon: <CrownOutlined />, label: '等级设置', path: '/tiers', requiredPermission: 'RULE_READ' },
+      { key: 'channel-list', icon: <ApiOutlined />, label: '渠道列表', path: '/channels', requiredPermission: 'CHANNEL_READ' },
+      { key: 'scripting', icon: <CodeOutlined />, label: '脚本工作台', path: '/channels/scripting', requiredPermission: 'CHANNEL_WRITE' },
+      { key: 'roles', icon: <SafetyCertificateOutlined />, label: '角色权限', path: '/system/roles', requiredPermission: 'TENANT_WRITE' },
+      { key: 'users', icon: <UserOutlined />, label: '用户管理', path: '/system/users', requiredPermission: 'TENANT_WRITE' },
+      { key: 'logs', icon: <FileTextOutlined />, label: '操作日志', path: '/system/logs', requiredPermission: 'AUDIT_READ' },
+      { key: 'spi-logs', icon: <AuditOutlined />, label: 'SPI 日志', path: '/system/spi-logs', requiredPermission: 'AUDIT_READ' },
+      { key: 'audit', icon: <WarningOutlined />, label: '租户审计', path: '/system/audit', requiredPermission: 'AUDIT_READ' },
+      { key: 'llm-config', icon: <RobotOutlined />, label: '大模型配置', path: '/system/llm-config', requiredPermission: 'TENANT_WRITE' },
     ],
   },
 ];
@@ -87,10 +111,32 @@ function findMenuKey(path: string, items: MenuItemType[]): string {
 const AppShell: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentProgramCode, programs, setCurrentProgram, online, setOnline } = useAppStore();
+  const { currentProgramCode, programs, setCurrentProgram, online, setOnline, user, permissions, setUser } = useAppStore();
   const { token } = theme.useToken();
 
+  // 根据用户权限过滤菜单
+  const filteredMenuItems = filterMenuByPermissions(menuItems, permissions);
+
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+
+  // 页面刷新/首次加载时从 token 恢复用户状态
+  useEffect(() => {
+    const token = sessionStorage.getItem('auth_token');
+    if (token && !user) {
+      api.get('/auth/me').then(({ data }) => {
+        if (data.code === 'SUCCESS' && data.data?.user) {
+          const u = data.data.user;
+          setUser(
+            { userId: String(u.userId), username: u.username, displayName: u.displayName || u.username },
+            data.data.permissions || [],
+          );
+        }
+      }).catch(() => {
+        // token 无效，清除
+        sessionStorage.removeItem('auth_token');
+      });
+    }
+  }, []);
 
   // 监听路由变化，同步菜单选中
   useEffect(() => {
@@ -274,7 +320,7 @@ const AppShell: React.FC = () => {
             mode="horizontal"
             selectedKeys={selectedKeys}
             onClick={handleMenuClick}
-            items={menuItems.map(group => ({
+            items={filteredMenuItems.map(group => ({
               key: group.key,
               icon: group.icon,
               label: group.label,
@@ -314,7 +360,7 @@ const AppShell: React.FC = () => {
             <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
               <Space style={{ cursor: 'pointer' }}>
                 <Avatar size="small" icon={<UserOutlined />} />
-                <Text style={{ fontSize: 13, color: '#666' }}>管理员</Text>
+                <Text style={{ fontSize: 13, color: '#666' }}>{user?.displayName || '用户'}</Text>
               </Space>
             </Dropdown>
           </Space>

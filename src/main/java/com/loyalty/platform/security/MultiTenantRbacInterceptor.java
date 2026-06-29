@@ -62,7 +62,8 @@ public class MultiTenantRbacInterceptor implements HandlerInterceptor {
     /** 白名单路径（无需鉴权） */
     private static final Set<String> WHITELIST_PATHS = Set.of(
             "/actuator/health",
-            "/error"
+            "/error",
+            "/api/auth/login"
     );
 
     /** API 路径 → 所需权限映射 */
@@ -109,7 +110,7 @@ public class MultiTenantRbacInterceptor implements HandlerInterceptor {
         // 2. 解析 Authorization Header
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith(TOKEN_PREFIX)) {
-            log.warn("[RBAC] 缺少 Authorization Header: path={}", path);
+            log.warn("[RBAC] 缺少 Authorization Header: path={} method={}", path, method);
             writeError(response, HttpStatus.UNAUTHORIZED, "ERR_MISSING_TOKEN", "缺失 Authorization Token");
             return false;
         }
@@ -128,13 +129,16 @@ public class MultiTenantRbacInterceptor implements HandlerInterceptor {
 
         // 4. 检查 Token 过期
         if (ctx.isTokenExpired()) {
+            log.warn("[RBAC] Token 已过期: user={}", ctx.getUsername());
             writeError(response, HttpStatus.UNAUTHORIZED, "ERR_TOKEN_EXPIRED", "Token 已过期");
             return false;
         }
 
         // 5. 【关键】租户绑定 — 将 program_code 注入 TenantContext
         // 5a. 校验 JWT program_code 与请求头 X-Program-Code 一致性
-        if (ctx.getProgramCode() != null && !ctx.getProgramCode().isBlank()) {
+        //     SUPER_ADMIN (program_code='*') 允许跨租户访问，跳过一致性检查
+        if (ctx.getProgramCode() != null && !ctx.getProgramCode().isBlank()
+                && !"*".equals(ctx.getProgramCode())) {
             String headerProgramCode = TenantContext.get();
             if (headerProgramCode != null && !headerProgramCode.isBlank()
                     && !ctx.getProgramCode().equals(headerProgramCode)) {
@@ -145,6 +149,14 @@ public class MultiTenantRbacInterceptor implements HandlerInterceptor {
                 return false;
             }
             TenantContext.set(ctx.getProgramCode());
+        } else if (ctx.getProgramCode() != null && "*".equals(ctx.getProgramCode())) {
+            // SUPER_ADMIN: 使用请求头中的租户代码，但保留访问权
+            String headerProgramCode = TenantContext.get();
+            if (headerProgramCode != null && !headerProgramCode.isBlank()) {
+                TenantContext.set(headerProgramCode);
+            } else {
+                TenantContext.set(ctx.getProgramCode());
+            }
         }
 
         // 6. 权限校验
@@ -154,8 +166,6 @@ public class MultiTenantRbacInterceptor implements HandlerInterceptor {
                     ctx.getUsername(), ctx.getRole(), path, required);
             writeError(response, HttpStatus.FORBIDDEN, "ERR_FORBIDDEN",
                     "权限不足: 需要 " + required);
-            // 【安全红线】虽然返回 403，但必须在 finally 中清理 TenantContext
-            // 这里由外层 TenantContextFilter 的 finally 统一清理
             return false;
         }
 
@@ -259,10 +269,14 @@ public class MultiTenantRbacInterceptor implements HandlerInterceptor {
     }
 
     private void writeError(HttpServletResponse response, HttpStatus status,
-                             String code, String message) throws Exception {
-        response.setStatus(status.value());
-        response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write(OBJECT_MAPPER.writeValueAsString(
-                ApiResponse.error(code, message)));
+                             String code, String message) {
+        try {
+            response.setStatus(status.value());
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write(OBJECT_MAPPER.writeValueAsString(
+                    ApiResponse.error(code, message)));
+        } catch (Exception e) {
+            log.error("[RBAC] 写入错误响应失败", e);
+        }
     }
 }

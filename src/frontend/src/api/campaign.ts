@@ -460,6 +460,11 @@ export interface CampaignPlan {
   approvedBy: string;
   createdAt: string;
   updatedAt: string;
+  /** MANUAL / EVENT_TRIGGERED / SCHEDULED / HYBRID */
+  triggerType: string;
+  triggerConfigId: string;
+  estimatedTriggerCount: number;
+  costPerTrigger: number;
 }
 
 export interface CanvasNode {
@@ -1030,4 +1035,839 @@ export async function getOptimizationHistory(portfolioId: string, page = 0, size
   const res = await api.get('/campaign/optimization/history', { params: { portfolioId, page, size } });
   return res.data.data;
 }
+
+// ==================== Event Trigger API ====================
+
+export interface CampaignEventTrigger {
+  id: string;
+  planId: string;
+  workspaceId: string;
+  programCode: string;
+  eventType: string;
+  eventSource: string;
+  eventTopic: string;
+  eventFilter: string;
+  dedupWindowMinutes: number;
+  dedupKeyFields: string;
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EventTriggerLog {
+  id: string;
+  planId: string;
+  triggerId: string;
+  eventId: string;
+  eventType: string;
+  memberId: string;
+  triggered: boolean;
+  skipReason: string;
+  processInstanceKey: number;
+  dedupKey: string;
+  eventTime: string;
+  triggerTime: string;
+  createdAt: string;
+}
+
+export interface TriggerStats {
+  planId: string;
+  totalLogs: number;
+  triggered: number;
+  deduped: number;
+  filterNotMatch: number;
+  successRate: number;
+}
+
+export interface TriggerResult {
+  eventType: string;
+  matchedTriggers: number;
+  details: TriggerDetail[];
+}
+
+export interface TriggerDetail {
+  triggerId: string;
+  status: string;
+  skipReason: string;
+  processInstanceKey: number;
+  errorMessage: string;
+}
+
+/** 创建事件触发器 */
+export async function createEventTrigger(data: Partial<CampaignEventTrigger>) {
+  const res = await api.post<ApiResponse<CampaignEventTrigger>>('/campaign/event/triggers', data);
+  return res.data.data;
+}
+
+/** 查询计划下的触发器列表 */
+export async function getPlanTriggers(planId: string) {
+  const res = await api.get<ApiResponse<CampaignEventTrigger[]>>(`/campaign/event/triggers/plan/${planId}`);
+  return res.data.data;
+}
+
+/** 更新触发器配置 */
+export async function updateEventTrigger(triggerId: string, data: Partial<CampaignEventTrigger>) {
+  const res = await api.put<ApiResponse<CampaignEventTrigger>>(`/campaign/event/triggers/${triggerId}`, data);
+  return res.data.data;
+}
+
+/** 暂停触发器 */
+export async function pauseEventTrigger(triggerId: string) {
+  const res = await api.post<ApiResponse<CampaignEventTrigger>>(`/campaign/event/triggers/${triggerId}/pause`);
+  return res.data.data;
+}
+
+/** 恢复触发器 */
+export async function resumeEventTrigger(triggerId: string) {
+  const res = await api.post<ApiResponse<CampaignEventTrigger>>(`/campaign/event/triggers/${triggerId}/resume`);
+  return res.data.data;
+}
+
+/** 删除触发器 */
+export async function deleteEventTrigger(triggerId: string) {
+  const res = await api.delete(`/campaign/event/triggers/${triggerId}`);
+  return res.data.data;
+}
+
+/** 获取触发器执行日志 */
+export async function getTriggerLogs(triggerId: string) {
+  const res = await api.get<ApiResponse<EventTriggerLog[]>>(`/campaign/event/triggers/${triggerId}/logs`);
+  return res.data.data;
+}
+
+/** 获取计划下所有触发日志 */
+export async function getPlanTriggerLogs(planId: string) {
+  const res = await api.get<ApiResponse<EventTriggerLog[]>>(`/campaign/event/triggers/logs/plan/${planId}`);
+  return res.data.data;
+}
+
+/** 获取触发统计 */
+export async function getTriggerStats(planId: string) {
+  const res = await api.get<ApiResponse<TriggerStats>>(`/campaign/event/triggers/stats/${planId}`);
+  return res.data.data;
+}
+
+/** 发送 Webhook 事件 */
+export async function sendWebhookEvent(programCode: string, eventType: string, payload: Record<string, any>) {
+  const res = await api.post(`/campaign/event/webhook/${programCode}/${eventType}`, payload);
+  return res.data.data;
+}
+
+/** 手动触发测试事件（开发调试） */
+export async function testTrigger(eventType: string, memberId: string, payload: Record<string, any>) {
+  const res = await api.post<ApiResponse<TriggerResult>>('/campaign/event/test/trigger', { eventType, memberId, payload });
+  return res.data.data;
+}
+
+// ==================== Consent & Preference API ====================
+
+export interface UserConsent {
+  memberId: string;
+  programCode: string;
+  globalUnsubscribe: boolean;
+  unsubscribeReason: string;
+  unsubscribeChannel: string;
+  unsubscribeAt: string;
+  emailOptIn: boolean;
+  smsOptIn: boolean;
+  pushOptIn: boolean;
+  emailOptOutAt: string;
+  smsOptOutAt: string;
+  pushOptOutAt: string;
+  categoryPreferences: string;
+  categoryPreferencesUpdatedAt: string;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  timezone: string;
+  preferenceSource: string;
+  lastUpdatedBy: string;
+  lastUpdatedAt: string;
+  createdAt: string;
+}
+
+export interface ConsentChangeLog {
+  id: number;
+  memberId: string;
+  programCode: string;
+  fieldChanged: string;
+  oldValue: string;
+  newValue: string;
+  source: string;
+  sourceDetail: string;
+  operatedBy: string;
+  createdAt: string;
+}
+
+export interface SendCheckResult {
+  allowed: boolean;
+  code: string;
+  message: string;
+}
+
+export interface GdprRequestEntity {
+  id: string;
+  memberId: string;
+  programCode: string;
+  requestType: string;
+  requestSource: string;
+  requestReason: string;
+  status: string;
+  processedAt: string;
+  completionSummary: string;
+}
+
+export interface UpdatePreferenceRequest {
+  channelOptIns?: Record<string, boolean>;
+  categoryPreferences?: { included: string[]; excluded: string[] };
+  quietHours?: { enabled: boolean; start: string; end: string; timezone: string };
+  globalUnsubscribe?: boolean;
+  unsubscribeReason?: string;
+  unsubscribeChannel?: string;
+  source?: string;
+}
+
+/** 获取用户偏好 */
+export async function getUserConsent(memberId: string) {
+  const res = await api.get<ApiResponse<UserConsent>>(`/campaign/consent/${memberId}`);
+  return res.data.data;
+}
+
+/** 更新用户偏好 */
+export async function updateUserConsent(memberId: string, data: UpdatePreferenceRequest) {
+  const res = await api.put<ApiResponse<UserConsent>>(`/campaign/consent/${memberId}`, data);
+  return res.data.data;
+}
+
+/** 获取用户偏好变更日志 */
+export async function getConsentChangeLogs(memberId: string) {
+  const res = await api.get<ApiResponse<ConsentChangeLog[]>>(`/campaign/consent/${memberId}/logs`);
+  return res.data.data;
+}
+
+/** 检查是否可发送 */
+export async function checkCanSend(memberId: string, channel: string, category?: string) {
+  const res = await api.get<ApiResponse<SendCheckResult>>('/campaign/consent/check', {
+    params: { memberId, channel, category },
+  });
+  return res.data.data;
+}
+
+/** 提交 GDPR 删除请求 */
+export async function submitGdprDelete(memberId: string, programCode: string, reason: string) {
+  const res = await api.post('/campaign/consent/gdpr/delete', { memberId, programCode, reason });
+  return res.data.data;
+}
+
+/** 获取 GDPR 请求列表 */
+export async function getGdprRequests(memberId: string) {
+  const res = await api.get<ApiResponse<GdprRequestEntity[]>>(`/campaign/consent/gdpr/requests/${memberId}`);
+  return res.data.data;
+}
+
+// ==================== Experiment A/B Testing API ====================
+
+export interface ExperimentEntity {
+  id: string;
+  planId: string;
+  workspaceId: string;
+  programCode: string;
+  name: string;
+  description: string;
+  status: string;
+  trafficAllocationPct: number;
+  totalSampleSize: number;
+  objectiveMetric: string;
+  objectiveDirection: string;
+  minimumDetectableEffect: number;
+  statisticalSignificance: number;
+  autoPromoteWinner: boolean;
+  autoPromoteDelayMinutes: number;
+  startedAt: string;
+  completedAt: string;
+  winningVariantId: string;
+  promoted: boolean;
+  promotedAt: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ExperimentVariantEntity {
+  id: string;
+  experimentId: string;
+  variantName: string;
+  variantCode: string;
+  trafficPercentage: number;
+  nodeOverrides: string;
+  exposureCount: number;
+  eventCount: number;
+  metricValue: number;
+  totalRevenue: number;
+  pValue: number;
+  relativeImprovement: number;
+  confidenceInterval: string;
+  isWinner: boolean;
+}
+
+export interface ExperimentStats {
+  experimentId: string;
+  totalAssignments: number;
+  winnerId: string;
+  overallImprovement: number;
+  significantVariants: string[];
+  metricValues: Record<string, number>;
+  variants: ExperimentVariantEntity[];
+}
+
+/** 创建实验 */
+export async function createExperiment(data: Partial<ExperimentEntity>) {
+  const res = await api.post<ApiResponse<ExperimentEntity>>('/campaign/experiment', data);
+  return res.data.data;
+}
+
+/** 查询计划下的实验 */
+export async function getPlanExperiments(planId: string) {
+  const res = await api.get<ApiResponse<ExperimentEntity[]>>(`/campaign/experiment/plan/${planId}`);
+  return res.data.data;
+}
+
+/** 查询实验详情 */
+export async function getExperimentDetail(id: string) {
+  const res = await api.get<ApiResponse<{ experiment: ExperimentEntity; variants: ExperimentVariantEntity[] }>>(`/campaign/experiment/${id}`);
+  return res.data.data;
+}
+
+/** 启动实验 */
+export async function startExperiment(id: string) {
+  const res = await api.post<ApiResponse<ExperimentEntity>>(`/campaign/experiment/${id}/start`);
+  return res.data.data;
+}
+
+/** 暂停实验 */
+export async function pauseExperiment(id: string) {
+  const res = await api.post<ApiResponse<ExperimentEntity>>(`/campaign/experiment/${id}/pause`);
+  return res.data.data;
+}
+
+/** 完成实验 */
+export async function completeExperiment(id: string) {
+  const res = await api.post<ApiResponse<ExperimentEntity>>(`/campaign/experiment/${id}/complete`);
+  return res.data.data;
+}
+
+/** 获取变体列表 */
+export async function getExperimentVariants(experimentId: string) {
+  const res = await api.get<ApiResponse<ExperimentVariantEntity[]>>(`/campaign/experiment/${experimentId}/variants`);
+  return res.data.data;
+}
+
+/** 添加变体 */
+export async function addExperimentVariant(experimentId: string, data: Partial<ExperimentVariantEntity>) {
+  const res = await api.post<ApiResponse<ExperimentVariantEntity>>(`/campaign/experiment/${experimentId}/variants`, data);
+  return res.data.data;
+}
+
+/** 获取实验统计 */
+export async function getExperimentStats(id: string) {
+  const res = await api.get<ApiResponse<ExperimentStats>>(`/campaign/experiment/${id}/stats`);
+  return res.data.data;
+}
+
+/** 推全胜者（将胜者变体标记为已推全） */
+export async function promoteExperimentWinner(id: string) {
+  const res = await api.post<ApiResponse<ExperimentEntity>>(`/campaign/experiment/${id}/promote`);
+  return res.data.data;
+}
+
+// ==================== 样本量估算 API ====================
+
+export interface SampleSizeRequest {
+  objectiveMetric: string;
+  baselineRate: number;
+  minimumDetectableEffect: number;
+  statisticalSignificance?: number;
+  statisticalPower?: number;
+  variantCount?: number;
+  stdDevEstimate?: number;
+  dailyTraffic?: number;
+}
+
+export interface SampleSizeResponse {
+  sampleSizePerGroup: number;
+  totalSampleSize: number;
+  baselineRate: number;
+  expectedRate: number;
+  absoluteEffect: number;
+  statisticalSignificance: number;
+  statisticalPower: number;
+  variantCount: number;
+  estimatedDays: number | null;
+  objectiveMetric: string;
+  formula: string;
+}
+
+/** 估算实验所需样本量 */
+export async function estimateSampleSize(data: SampleSizeRequest) {
+  const res = await api.post<ApiResponse<SampleSizeResponse>>('/campaign/experiment/estimate-sample-size', data);
+  return res.data.data;
+}
+
+// ==================== Budget Pacing API ====================
+
+export interface BudgetPacingEntity {
+  id: string;
+  planId: string;
+  workspaceId: string;
+  programCode: string;
+  totalBudget: number;
+  totalBudgetCurrency: string;
+  pacingMode: string;
+  dailyCapEnabled: boolean;
+  dailyCapAmount: number;
+  dailyCapType: string;
+  dynamicPacingConfig: string;
+  alertThresholds: string;
+  totalConsumed: number;
+  todayConsumed: number;
+  yesterdayConsumed: number;
+  pausedByBudget: boolean;
+  createdAt: string;
+}
+
+export interface BudgetConsumptionEntity {
+  id: string;
+  planId: string;
+  nodeId: string;
+  memberId: string;
+  amount: number;
+  unitCost: number;
+  quantity: number;
+  consumptionType: string;
+  channel: string;
+  consumedAt: string;
+}
+
+export interface BudgetAlertEntity {
+  id: string;
+  planId: string;
+  alertType: string;
+  alertMessage: string;
+  threshold: number;
+  currentConsumption: number;
+  totalBudget: number;
+  status: string;
+  triggeredAt: string;
+}
+
+export interface BudgetStatus {
+  planId: string;
+  totalBudget: number;
+  totalConsumed: number;
+  totalRemaining: number;
+  consumptionRatio: number;
+  pacingMode: string;
+  dailyCapEnabled: boolean;
+  dailyCapAmount: number;
+  todayConsumed: number;
+  todayRemaining: number;
+  isPausedByBudget: boolean;
+  alerts: BudgetAlertEntity[];
+}
+
+/** 获取预算节奏状态 */
+export async function getBudgetStatus(planId: string) {
+  const res = await api.get<ApiResponse<BudgetStatus>>(`/campaign/budget/pacing/${planId}`);
+  return res.data.data;
+}
+
+/** 保存预算节奏配置 */
+export async function saveBudgetPacing(planId: string, data: Partial<BudgetPacingEntity>) {
+  const res = await api.put<ApiResponse<BudgetPacingEntity>>(`/campaign/budget/pacing/${planId}`, data);
+  return res.data.data;
+}
+
+/** 获取消耗明细 */
+export async function getBudgetConsumptions(planId: string) {
+  const res = await api.get<ApiResponse<BudgetConsumptionEntity[]>>(`/campaign/budget/pacing/${planId}/consumptions`);
+  return res.data.data;
+}
+
+/** 获取告警 */
+export async function getBudgetAlerts(planId: string, status?: string) {
+  const res = await api.get<ApiResponse<BudgetAlertEntity[]>>(`/campaign/budget/pacing/${planId}/alerts`, { params: { status } });
+  return res.data.data;
+}
+
+// ==================== Campaign Calendar API ====================
+
+export interface CalendarDay {
+  date: string;
+  campaigns: { planId: string; name: string; triggerType: string; status: string; estimatedVolume: number }[];
+  conflicts: { conflictId: string; type: string; severity: string; message: string }[];
+}
+
+export interface CalendarData {
+  year: number;
+  month: number;
+  days: CalendarDay[];
+  totalConflicts: number;
+}
+
+export interface ConflictRecordEntity {
+  id: string;
+  workspaceId: string;
+  planId1: string;
+  planId2: string;
+  planName1: string;
+  planName2: string;
+  conflictType: string;
+  severity: string;
+  overlapAudienceCount: number;
+  overlapPercentage: number;
+  affectedChannel: string;
+  overloadRatio: number;
+  conflictDetail: string;
+  conflictStartDate: string;
+  conflictEndDate: string;
+  status: string;
+  detectedAt: string;
+}
+
+/** 获取日历数据 */
+export async function getCalendarData(workspaceId: string, year = 2026, month = 6) {
+  const res = await api.get<ApiResponse<CalendarData>>(`/campaign/calendar/workspace/${workspaceId}`, { params: { year, month } });
+  return res.data.data;
+}
+
+/** 获取冲突列表 */
+export async function getCalendarConflicts(workspaceId: string) {
+  const res = await api.get<ApiResponse<ConflictRecordEntity[]>>('/campaign/calendar/conflicts', { params: { workspaceId } });
+  return res.data.data;
+}
+
+/** 手动触发冲突检测 */
+export async function triggerConflictDetection(workspaceId: string) {
+  const res = await api.post<ApiResponse<ConflictRecordEntity[]>>(`/campaign/calendar/detect/${workspaceId}`);
+  return res.data.data;
+}
+
+/** 解决/忽略冲突 */
+export async function resolveConflict(conflictId: string, action: string, note?: string) {
+  const res = await api.post(`/campaign/calendar/conflicts/${conflictId}/resolve`, { action, note });
+  return res.data.data;
+}
+
+// ==================== DLQ API ====================
+
+export interface DlqTask {
+  id: string;
+  instanceId: string;
+  planId: string;
+  jobKey: number;
+  taskType: string;
+  taskName: string;
+  nodeId: string;
+  status: string;
+  inputVariables: Record<string, any>;
+  errorMessage: string;
+  retryCount: number;
+  isDlq: boolean;
+  dlqReason: string;
+  dlqArchived: boolean;
+  replayedCount: number;
+  originalJobKey: number;
+  startTime: string;
+  endTime: string;
+  createdAt: string;
+}
+
+export interface DlqReplayLogEntry {
+  id: string;
+  taskId: string;
+  planId: string;
+  replayType: string;
+  newJobKey: number;
+  newProcessInstanceKey: number;
+  status: string;
+  operatorId: string;
+  reason: string;
+  replayedAt: string;
+}
+
+/** 获取死信列表 */
+export async function getDlqList(planId?: string) {
+  const res = await api.get<ApiResponse<{ total: number; items: DlqTask[] }>>('/campaign/dlq/list', { params: { planId } });
+  return res.data.data;
+}
+
+/** 获取死信数量 */
+export async function getDlqCount() {
+  const res = await api.get<ApiResponse<{ dlqCount: number }>>('/campaign/dlq/count');
+  return res.data.data;
+}
+
+/** 单条重放 */
+export async function replayDlqTask(taskId: string, operatorId: string, reason: string) {
+  const res = await api.post(`/campaign/dlq/${taskId}/replay`, { operatorId, reason });
+  return res.data.data;
+}
+
+/** 批量重放 */
+export async function replayDlqBatch(params: { planId?: string; nodeType?: string; operatorId?: string; reason?: string }) {
+  const res = await api.post('/campaign/dlq/replay/batch', params);
+  return res.data.data;
+}
+
+/** 获取重放日志 */
+export async function getDlqReplayLogs(taskId: string) {
+  const res = await api.get<ApiResponse<DlqReplayLogEntry[]>>(`/campaign/dlq/${taskId}/replay-logs`);
+  return res.data.data;
+}
+
+/** 归档死信 */
+export async function archiveDlq(daysOld = 7) {
+  const res = await api.post('/campaign/dlq/archive', null, { params: { daysOld } });
+  return res.data.data;
+}
+
+// ==================== Webhook API ====================
+
+export interface WebhookLogEntry {
+  id: string;
+  programCode: string;
+  triggerId: string;
+  requestPath: string;
+  requestMethod: string;
+  requestHeaders: string;
+  requestBody: string;
+  requestIp: string;
+  authStatus: string;
+  authError: string;
+  mappedEventType: string;
+  mappedMemberId: string;
+  triggerCampaign: boolean;
+  skipReason: string;
+  responseStatus: number;
+  processingTimeMs: number;
+  receivedAt: string;
+}
+
+/** 查询 Webhook 日志 */
+export async function getWebhookLogs(programCode: string) {
+  const res = await api.get<ApiResponse<WebhookLogEntry[]>>('/campaign/webhook/logs', { params: { programCode } });
+  return res.data.data;
+}
+
+// ==================== Multi-Program Sharing API ====================
+
+export interface SharingPolicyEntity {
+  id: string;
+  programCode: string;
+  sharingScope: string;
+  targetPrograms: string[];
+  sharedResourceTypes: string[];
+  permissionType: string;
+  enabled: boolean;
+}
+
+export interface CrossProgramRelationEntity {
+  id: string;
+  planId: string;
+  programCode: string;
+  role: string;
+  canEdit: boolean;
+  canTrigger: boolean;
+  canViewResults: boolean;
+  budgetAllocation: number;
+}
+
+/** 获取可访问Program列表 */
+export async function getAccessiblePrograms(programCode: string, resourceType = 'ASSET') {
+  const res = await api.get('/campaign/sharing/accessible-programs', { params: { programCode, resourceType } });
+  return res.data.data;
+}
+
+/** 获取共享策略 */
+export async function getSharingPolicies(programCode: string) {
+  const res = await api.get<ApiResponse<SharingPolicyEntity[]>>(`/campaign/sharing/policies/${programCode}`);
+  return res.data.data;
+}
+
+/** 创建共享策略 */
+export async function createSharingPolicy(data: Partial<SharingPolicyEntity>) {
+  const res = await api.post<ApiResponse<SharingPolicyEntity>>('/campaign/sharing/policy', data);
+  return res.data.data;
+}
+
+/** 检查全局黑名单 */
+export async function checkGlobalBlacklist(memberId: string) {
+  const res = await api.get('/campaign/sharing/blacklist/check', { params: { memberId } });
+  return res.data.data;
+}
+
+/** 添加全局黑名单 */
+export async function addGlobalBlacklist(memberId: string, programCode: string, reason: string) {
+  const res = await api.post('/campaign/sharing/blacklist', { memberId, programCode, reason });
+  return res.data.data;
+}
+
+/** 获取跨Program关联 */
+export async function getCrossProgramRelations(planId: string) {
+  const res = await api.get<ApiResponse<CrossProgramRelationEntity[]>>(`/campaign/sharing/relations/${planId}`);
+  return res.data.data;
+}
+
+// ==================== Recommendation API ====================
+
+export interface RecommendationItemType {
+  productId: string;
+  productName: string;
+  price: number;
+  imageUrl: string;
+  detailUrl: string;
+  score: number;
+  reason: string;
+}
+
+export interface RecommendationStrategyEntity {
+  id: string;
+  programCode: string;
+  strategyName: string;
+  strategyType: string;
+  description: string;
+  recommendationConfig: string;
+  fallbackStrategyId: string;
+  fallbackContent: string;
+  cacheTtlSeconds: number;
+  enabled: boolean;
+  isDefault: boolean;
+}
+
+/** 获取推荐预览 */
+export async function getRecommendationPreview(memberId: string, strategyId: string, maxItems = 3) {
+  const res = await api.get('/campaign/recommendation/preview', { params: { memberId, strategyId, maxItems } });
+  return res.data.data;
+}
+
+/** 获取策略列表 */
+export async function getRecommendationStrategies(programCode: string) {
+  const res = await api.get<ApiResponse<RecommendationStrategyEntity[]>>('/campaign/recommendation/strategies', { params: { programCode } });
+  return res.data.data;
+}
+
+/** 创建策略 */
+export async function createRecommendationStrategy(data: Partial<RecommendationStrategyEntity>) {
+  const res = await api.post<ApiResponse<RecommendationStrategyEntity>>('/campaign/recommendation/strategy', data);
+  return res.data.data;
+}
+
+/** 更新策略 */
+export async function updateRecommendationStrategy(id: string, data: Partial<RecommendationStrategyEntity>) {
+  const res = await api.put<ApiResponse<RecommendationStrategyEntity>>(`/campaign/recommendation/strategy/${id}`, data);
+  return res.data.data;
+}
+
+// ==================== Strategy Blueprint API ====================
+
+export interface StrategyBlueprintEntity {
+  id?: string; blueprintName: string; industryType: string; description?: string;
+  formulaJson?: string; leversJson?: string; initiativeMappingJson?: string;
+  version?: number; isActive?: boolean; isSystemDefault?: boolean;
+  fallbackMode?: string; createdAt?: string;
+}
+
+export interface GoalDecompositionEntity {
+  id: string; goalId: string; blueprintId?: string; workspaceId: string;
+  targetValue: number; baselineValue: number; totalGap: number;
+  decompositionMode: string; leverGaps?: string; initiativeSuggestions?: string;
+  adoptedPlanId?: string;
+}
+
+export async function createGoalWithBlueprint(goal: any) {
+  const res = await api.post<ApiResponse<any>>('/campaign/strategy/goal', goal);
+  return res.data.data;
+}
+
+export async function analyzeGoalGap(goalId: string) {
+  const res = await api.post<ApiResponse<GoalDecompositionEntity>>(`/campaign/strategy/goal/${goalId}/analyze-gap`);
+  return res.data.data;
+}
+
+export async function createInitiativesFromStrategy(goalId: string) {
+  const res = await api.post<ApiResponse<any[]>>(`/campaign/strategy/goal/${goalId}/create-initiatives`);
+  return res.data.data;
+}
+
+export async function getGoalDecomposition(goalId: string) {
+  const res = await api.get<ApiResponse<GoalDecompositionEntity>>(`/campaign/strategy/goal/${goalId}/decomposition`);
+  return res.data.data;
+}
+
+export async function getStrategyBlueprints(industryType?: string) {
+  const params = industryType ? { industryType } : {};
+  const res = await api.get<ApiResponse<StrategyBlueprintEntity[]>>('/campaign/strategy/blueprints', { params });
+  return res.data.data;
+}
+
+export async function saveStrategyBlueprint(data: Partial<StrategyBlueprintEntity>) {
+  const res = await api.post<ApiResponse<StrategyBlueprintEntity>>('/campaign/strategy/blueprint', data);
+  return res.data.data;
+}
+
+// ==================== System RBAC API ====================
+
+export interface SystemUserEntity {
+  id?: string; username: string; realName?: string; email?: string; phone?: string;
+  userType?: string; status?: string; programCode?: string; roleId?: string;
+  createdAt?: string;
+}
+export interface SystemRoleEntity {
+  id?: string; roleName: string; roleCode: string; description?: string;
+  permissionIds?: string[]; dataScope?: string; isSystem?: boolean;
+}
+export interface SystemPermissionEntity {
+  id?: string; permName: string; permCode: string; module?: string;
+  permType?: string; resourcePath?: string; sortOrder?: number;
+}
+
+export async function listSystemUsers(programCode?: string) {
+  const res = await api.get<ApiResponse<SystemUserEntity[]>>('/admin/system/users', { params: programCode ? { programCode } : {} });
+  return res.data.data;
+}
+export async function createSystemUser(data: any) {
+  const res = await api.post<ApiResponse<SystemUserEntity>>('/admin/system/user', data);
+  return res.data.data;
+}
+export async function updateSystemUser(id: string, data: Partial<SystemUserEntity>) {
+  const res = await api.put<ApiResponse<SystemUserEntity>>(`/admin/system/user/${id}`, data);
+  return res.data.data;
+}
+export async function resetUserPassword(id: string, password: string) {
+  const res = await api.post<ApiResponse<any>>(`/admin/system/user/${id}/reset-password`, { password });
+  return res.data.data;
+}
+export async function listSystemRoles(programCode?: string) {
+  const res = await api.get<ApiResponse<SystemRoleEntity[]>>('/admin/system/roles', { params: programCode ? { programCode } : {} });
+  return res.data.data;
+}
+export async function createSystemRole(data: Partial<SystemRoleEntity>) {
+  const res = await api.post<ApiResponse<SystemRoleEntity>>('/admin/system/role', data);
+  return res.data.data;
+}
+export async function updateSystemRole(id: string, data: Partial<SystemRoleEntity>) {
+  const res = await api.put<ApiResponse<SystemRoleEntity>>(`/admin/system/role/${id}`, data);
+  return res.data.data;
+}
+export async function listSystemPermissions(module?: string) {
+  const res = await api.get<ApiResponse<SystemPermissionEntity[]>>('/admin/system/permissions', { params: module ? { module } : {} });
+  return res.data.data;
+}
+export async function deleteSystemRole(id: string) {
+  const res = await api.delete<ApiResponse<any>>(`/admin/system/role/${id}`);
+  return res.data.data;
+}
+
 

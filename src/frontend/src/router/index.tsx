@@ -45,6 +45,7 @@ const RedemptionCancellation = lazy(() => import('../components/RedemptionCancel
 const EventInbox = lazy(() => import('../pages/EventInbox'));
 const NotificationPage = lazy(() => import('../pages/NotificationPage'));
 const RoleManage = lazy(() => import('../pages/RoleManage'));
+const UserManage = lazy(() => import('../pages/UserManage'));
 const OperationLogs = lazy(() => import('../pages/OperationLogs'));
 const SpiLogs = lazy(() => import('../pages/SpiLogs'));
 const TenantAudit = lazy(() => import('../pages/TenantAudit'));
@@ -64,6 +65,16 @@ const ExecutionMonitor = lazy(() => import('../pages/campaign/ExecutionMonitor')
 const FeedbackAnalysisPage = lazy(() => import('../pages/campaign/FeedbackAnalysisPage'));
 const OpportunityIntelligencePage = lazy(() => import('../pages/campaign/OpportunityIntelligencePage'));
 const OpportunityScoringConfig = lazy(() => import('../pages/campaign/OpportunityScoringConfig'));
+const EventTriggerDetailPage = lazy(() => import('../pages/campaign/EventTriggerDetailPage'));
+const ConsentManagementPage = lazy(() => import('../pages/campaign/ConsentManagementPage'));
+const ExperimentDashboardPage = lazy(() => import('../pages/campaign/ExperimentDashboardPage'));
+const BudgetPacingPage = lazy(() => import('../pages/campaign/BudgetPacingPage'));
+const CampaignCalendarPage = lazy(() => import('../pages/campaign/CampaignCalendarPage'));
+const DlqManagementPage = lazy(() => import('../pages/campaign/DlqManagementPage'));
+const WebhookMonitorPage = lazy(() => import('../pages/campaign/WebhookMonitorPage'));
+const SharingManagementPage = lazy(() => import('../pages/campaign/SharingManagementPage'));
+const RecommendationPage = lazy(() => import('../pages/campaign/RecommendationPage'));
+const StrategyBlueprintPage = lazy(() => import('../pages/campaign/StrategyBlueprintPage'));
 
 // ==================== 加载占位 ====================
 
@@ -109,7 +120,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
 
-      // 仪表盘
+      // 仪表盘（所有已认证用户可访问）
       {
         path: 'dashboard',
         element: <SuspenseWrapper><AuthGuard><Dashboard /></AuthGuard></SuspenseWrapper>,
@@ -118,225 +129,269 @@ export const router = createBrowserRouter([
       // Program 管理
       {
         path: 'programs',
-        element: <SuspenseWrapper><AuthGuard><ProgramList /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="TENANT_READ"><ProgramList /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'programs/new',
-        element: <SuspenseWrapper><AuthGuard><ProgramEdit /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="TENANT_WRITE"><ProgramEdit /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'programs/:code/edit',
-        element: <SuspenseWrapper><AuthGuard><ProgramEdit /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="TENANT_WRITE"><ProgramEdit /></AuthGuard></SuspenseWrapper>,
       },
 
       // Schema 编辑器
       {
         path: 'schema-editor',
-        element: <SuspenseWrapper><AuthGuard><SchemaEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="SCHEMA_READ"><SchemaEditor /></AuthGuard></SuspenseWrapper>,
       },
 
       // ChartDB
       {
         path: 'chartdb',
-        element: <SuspenseWrapper><AuthGuard><ChartDBPage /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="SCHEMA_WRITE"><ChartDBPage /></AuthGuard></SuspenseWrapper>,
       },
 
       // API 流程设计器
       {
         path: 'api-flow',
-        element: <SuspenseWrapper><AuthGuard><ApiFlowDesigner /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="CHANNEL_WRITE"><ApiFlowDesigner /></AuthGuard></SuspenseWrapper>,
       },
 
       // 会员中心
       {
         path: 'members',
-        element: <SuspenseWrapper><AuthGuard><MemberService /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="MEMBER_READ"><MemberService /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'members/:id',
-        element: <SuspenseWrapper><AuthGuard><MemberDetail /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="MEMBER_READ"><MemberDetail /></AuthGuard></SuspenseWrapper>,
       },
 
       // 积分管理
       {
         path: 'points/accounts',
-        element: <SuspenseWrapper><AuthGuard><PointsAccounts /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="POINTS_GRANT"><PointsAccounts /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'points/transactions',
-        element: <SuspenseWrapper><AuthGuard><PointsTransactions /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="POINTS_GRANT"><PointsTransactions /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'points/grant',
-        element: <SuspenseWrapper><AuthGuard><PointsGrant /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="POINTS_GRANT"><PointsGrant /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'points/redeem',
-        element: <SuspenseWrapper><AuthGuard><PointsRedeem /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="POINTS_REDEEM"><PointsRedeem /></AuthGuard></SuspenseWrapper>,
       },
 
       // 等级与规则
       {
         path: 'tiers',
-        element: <SuspenseWrapper><AuthGuard><TierConfig /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><TierConfig /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/tier/config',
-        element: <SuspenseWrapper><AuthGuard><TierRuleConfig /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><TierRuleConfig /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/tier/activity/new',
-        element: <SuspenseWrapper><AuthGuard><TierActivityEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><TierActivityEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/tier',
-        element: <SuspenseWrapper><AuthGuard><TierRuleList /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><TierRuleList /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules',
-        element: <SuspenseWrapper><AuthGuard><RuleList /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><RuleList /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/promo/new',
-        element: <SuspenseWrapper><AuthGuard><PromoEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><PromoEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/promo/:id/edit',
-        element: <SuspenseWrapper><AuthGuard><PromoEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><PromoEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/new',
-        element: <SuspenseWrapper><AuthGuard><RuleEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><RuleEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/:id/edit',
-        element: <SuspenseWrapper><AuthGuard><RuleEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><RuleEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/:id/test',
-        element: <SuspenseWrapper><AuthGuard><SandboxTest /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><SandboxTest /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'rules/ai',
-        element: <SuspenseWrapper><AuthGuard><AIRuleAssistant /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><AIRuleAssistant /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'flow-designer',
-        element: <SuspenseWrapper><AuthGuard><FlowDesigner /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><FlowDesigner /></AuthGuard></SuspenseWrapper>,
       },
 
       // ====== Campaign 营销管理 ======
       {
         path: 'campaign/workspaces',
-        element: <SuspenseWrapper><AuthGuard><CampaignWorkspaceList /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><CampaignWorkspaceList /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/workspaces/new',
-        element: <SuspenseWrapper><AuthGuard><CampaignWorkspaceCreate /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><CampaignWorkspaceCreate /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/workspace/:workspaceId',
-        element: <SuspenseWrapper><AuthGuard><CampaignWorkspaceDetail /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><CampaignWorkspaceDetail /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/decision',
-        element: <SuspenseWrapper><AuthGuard><DecisionEnginePage /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><DecisionEnginePage /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/simulation',
-        element: <SuspenseWrapper><AuthGuard><SimulationOptimizationPage /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><SimulationOptimizationPage /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/canvas/:planId',
-        element: <SuspenseWrapper><AuthGuard><CampaignCanvasEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><CampaignCanvasEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/canvas/new',
-        element: <SuspenseWrapper><AuthGuard><CampaignCanvasEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><CampaignCanvasEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/content',
-        element: <SuspenseWrapper><AuthGuard><ContentManagementPage /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><ContentManagementPage /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/intervention',
-        element: <SuspenseWrapper><AuthGuard><InterventionDashboard /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><InterventionDashboard /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/execution',
-        element: <SuspenseWrapper><AuthGuard><ExecutionMonitor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><ExecutionMonitor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/feedback',
-        element: <SuspenseWrapper><AuthGuard><FeedbackAnalysisPage /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="AUDIT_READ"><FeedbackAnalysisPage /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/opportunity',
-        element: <SuspenseWrapper><AuthGuard><OpportunityIntelligencePage /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><OpportunityIntelligencePage /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'campaign/opportunity/config',
-        element: <SuspenseWrapper><AuthGuard><OpportunityScoringConfig /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><OpportunityScoringConfig /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/event-trigger/:planId',
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><EventTriggerDetailPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/consent',
+        element: <SuspenseWrapper><AuthGuard permission="MEMBER_WRITE"><ConsentManagementPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/experiment',
+        element: <SuspenseWrapper><AuthGuard permission="RULE_WRITE"><ExperimentDashboardPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/budget-pacing',
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><BudgetPacingPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/calendar',
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><CampaignCalendarPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/dlq',
+        element: <SuspenseWrapper><AuthGuard permission="AUDIT_READ"><DlqManagementPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/webhook',
+        element: <SuspenseWrapper><AuthGuard permission="CHANNEL_READ"><WebhookMonitorPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/sharing',
+        element: <SuspenseWrapper><AuthGuard permission="TENANT_WRITE"><SharingManagementPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/recommendation',
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><RecommendationPage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'campaign/strategy-blueprint',
+        element: <SuspenseWrapper><AuthGuard permission="RULE_READ"><StrategyBlueprintPage /></AuthGuard></SuspenseWrapper>,
       },
 
       // API 配置管理
       {
         path: 'api-config',
-        element: <SuspenseWrapper><AuthGuard><ApiConfig /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="CHANNEL_WRITE"><ApiConfig /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'api-config/:id/mapping',
-        element: <SuspenseWrapper><AuthGuard><ApiMappingConfig /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="CHANNEL_WRITE"><ApiMappingConfig /></AuthGuard></SuspenseWrapper>,
       },
 
       // 渠道集成
       {
         path: 'channels',
-        element: <SuspenseWrapper><AuthGuard><ChannelList /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="CHANNEL_READ"><ChannelList /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'channels/:id/mapping',
-        element: <SuspenseWrapper><AuthGuard><MappingEditor /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="CHANNEL_WRITE"><MappingEditor /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'channels/scripting',
-        element: <SuspenseWrapper><AuthGuard><ScriptingWorkbench defaultChannel="TMALL" /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="CHANNEL_WRITE"><ScriptingWorkbench defaultChannel="TMALL" /></AuthGuard></SuspenseWrapper>,
       },
 
       // 运维监控
       {
         path: 'ops/event-inbox',
-        element: <SuspenseWrapper><AuthGuard><EventInbox /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="AUDIT_READ"><EventInbox /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'ops/notifications',
-        element: <SuspenseWrapper><AuthGuard><NotificationPage /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="AUDIT_READ"><NotificationPage /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'ops/redemption-cancel',
-        element: <SuspenseWrapper><AuthGuard><RedemptionCancellation /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="POINTS_ADJUST"><RedemptionCancellation /></AuthGuard></SuspenseWrapper>,
       },
 
       // 系统设置
       {
         path: 'system/llm-config',
-        element: <SuspenseWrapper><AuthGuard><LlmConfig /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="TENANT_WRITE"><LlmConfig /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'system/roles',
-        element: <SuspenseWrapper><AuthGuard><RoleManage /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="TENANT_WRITE"><RoleManage /></AuthGuard></SuspenseWrapper>,
+      },
+      {
+        path: 'system/users',
+        element: <SuspenseWrapper><AuthGuard permission="TENANT_WRITE"><UserManage /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'system/logs',
-        element: <SuspenseWrapper><AuthGuard><OperationLogs /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="AUDIT_READ"><OperationLogs /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'system/spi-logs',
-        element: <SuspenseWrapper><AuthGuard><SpiLogs /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="AUDIT_READ"><SpiLogs /></AuthGuard></SuspenseWrapper>,
       },
       {
         path: 'system/audit',
-        element: <SuspenseWrapper><AuthGuard><TenantAudit /></AuthGuard></SuspenseWrapper>,
+        element: <SuspenseWrapper><AuthGuard permission="AUDIT_READ"><TenantAudit /></AuthGuard></SuspenseWrapper>,
       },
 
       // 403
