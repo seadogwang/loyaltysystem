@@ -15,6 +15,12 @@ public class BusinessException extends RuntimeException {
         this.code = code;
     }
 
+    /** 兼容构造：仅传消息时使用默认错误码 ERR_BUSINESS */
+    public BusinessException(String message) {
+        super(message);
+        this.code = "ERR_BUSINESS";
+    }
+
     public BusinessException(String code, String message, Throwable cause) {
         super(message, cause);
         this.code = code;

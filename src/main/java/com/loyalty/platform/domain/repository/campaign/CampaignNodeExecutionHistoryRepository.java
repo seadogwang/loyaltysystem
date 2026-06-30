@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignNodeExecutionHistoryRepository extends BaseRepository<CampaignNodeExecutionHistory, String> {
+public interface CampaignNodeExecutionHistoryRepository extends CampaignBaseRepository<CampaignNodeExecutionHistory, String> {
 
     List<CampaignNodeExecutionHistory> findByPlanIdOrderByStartTimeDesc(String planId);
 

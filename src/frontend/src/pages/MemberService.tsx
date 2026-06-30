@@ -25,7 +25,7 @@ interface OrderVO { orderId: string; orderTime: string; payTime: string; orderAm
 interface TierDefVO { tierCode: string; tierName: string; minPoints: number; maxPoints: number; sequence: number; }
 
 const TYPE_LABELS: Record<string, string> = { REWARD: '消费积分', TIER: '等级成长值', CREDIT: '授信积分' };
-const STATUS_COLOR: Record<string, string> = { ENROLLED: 'green', FROZEN_REDEMPTION: 'red', MERGED: 'default', SUSPENDED: 'orange' };
+const STATUS_COLOR: Record<string, string> = { ENROLLED: 'green', SUSPENDED: 'red', MERGED: 'default', DEACTIVATED: 'orange' };
 
 // ==================== 子组件 ====================
 
@@ -501,7 +501,7 @@ const MemberService: React.FC = () => {
               <Button size="small" icon={<EditOutlined />}>信息修改</Button>
               <Button size="small" icon={<DollarOutlined />} onClick={() => setPtsModal(true)}>调整积分</Button>
               <Button size="small" icon={<CrownOutlined />} onClick={() => setTierModal(true)}>调整等级</Button>
-              {member.status !== 'FROZEN_REDEMPTION' ? (
+              {member.status !== 'SUSPENDED' ? (
                 <Popconfirm
                   title="冻结后会员将无法使用积分兑换，是否继续？"
                   onConfirm={handleFreeze}

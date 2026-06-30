@@ -144,6 +144,22 @@ export const NodeRegistry: Record<NodeType, NodeDefinition> = {
     inputPorts: [{ id: 'in', label: '', type: 'input' }],
     outputPorts: [{ id: 'out', label: '', type: 'output' }],
   },
+  EXPERIMENT: {
+    type: 'EXPERIMENT', label: 'A/B实验', icon: '\u{1F9EA}', category: 'logic',
+    description: 'A/B测试实验分流节点，支持多变体流量分配', color: '#f59e0b',
+    defaultConfig: () => ({
+      experimentName: '', objectiveMetric: 'CLICK_RATE', objectiveDirection: 'HIGHER',
+      trafficAllocationPct: 100, variants: [],
+      statisticalSignificance: 0.95, autoPromoteWinner: false,
+    }),
+    inputPorts: [{ id: 'in', label: '', type: 'input' }],
+    outputPorts: [
+      { id: 'out_a', label: 'A', type: 'output' },
+      { id: 'out_b', label: 'B', type: 'output' },
+      { id: 'out_c', label: 'C', type: 'output' },
+    ],
+    minOutputs: 2, maxOutputs: 5,
+  },
   APPROVAL: {
     type: 'APPROVAL', label: '人工审批', icon: '✅', category: 'control',
     description: '暂停流程等待人工审批', color: '#0891b2',

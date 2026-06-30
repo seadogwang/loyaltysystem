@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CampaignOpportunityRepository extends BaseRepository<CampaignOpportunity, String> {
+public interface CampaignOpportunityRepository extends CampaignBaseRepository<CampaignOpportunity, String> {
 
     List<CampaignOpportunity> findByWorkspaceIdAndGoalId(String workspaceId, String goalId);
 

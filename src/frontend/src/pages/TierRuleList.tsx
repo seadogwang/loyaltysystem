@@ -50,7 +50,7 @@ const TierRuleList: React.FC = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleToggleStatus = async (ruleId: number, currentStatus: string) => {
-    const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const newStatus = currentStatus === 'ACTIVE' ? 'ARCHIVED' : 'ACTIVE';
     try {
       await api.put(`/admin/rules/${ruleId}`, { status: newStatus });
       message.success(`已${newStatus === 'ACTIVE' ? '启用' : '停用'}`);

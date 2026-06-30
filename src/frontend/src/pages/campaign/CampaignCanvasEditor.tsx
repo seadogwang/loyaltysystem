@@ -320,6 +320,116 @@ const NODE_CONFIG_SCHEMAS: Record<string, ConfigField[]> = {
     { key: 'timeoutHours', label: '超时(小时)', type: 'number', placeholder: '默认 24' },
     { key: 'autoReject', label: '超时自动拒绝', type: 'boolean', defaultValue: true },
   ],
+  EVENT_TRIGGER: [
+    { key: 'eventSource', label: '事件来源', type: 'select', required: true,
+      options: [
+        { label: 'Loyalty EventBridge', value: 'loyalty_event' },
+        { label: 'Kafka Topic', value: 'kafka_topic' },
+        { label: 'Custom Webhook', value: 'custom_webhook' },
+      ]},
+    { key: 'eventType', label: '事件类型', type: 'select', required: true,
+      options: [
+        { label: '订单创建 (ORDER_CREATED)', value: 'ORDER_CREATED' },
+        { label: '购物车放弃 (CART_ABANDONED)', value: 'CART_ABANDONED' },
+        { label: '等级变更 (TIER_CHANGED)', value: 'TIER_CHANGED' },
+        { label: '连续登录7天 (LOGIN_7_DAYS)', value: 'LOGIN_7_DAYS' },
+        { label: '订单退款 (ORDER_REFUNDED)', value: 'ORDER_REFUNDED' },
+        { label: '生日 (BIRTHDAY)', value: 'BIRTHDAY' },
+        { label: '会员注册 (MEMBER_REGISTERED)', value: 'MEMBER_REGISTERED' },
+        { label: '积分变更 (POINTS_CHANGED)', value: 'POINTS_CHANGED' },
+        { label: '页面浏览 (PAGE_VIEW)', value: 'PAGE_VIEW' },
+        { label: '自定义事件 (CUSTOM)', value: 'CUSTOM' },
+      ]},
+    { key: 'kafkaTopic', label: 'Kafka Topic', type: 'string',
+      placeholder: 'eventSource=kafka_topic 时必填，如: loyalty.event.order' },
+    { key: 'eventFilters', label: '事件过滤条件', type: 'array', defaultValue: [],
+      itemSchema: [
+        { key: 'field', label: '字段', type: 'string', required: true,
+          placeholder: '如: order_amount 或 payload.amount' },
+        { key: 'operator', label: '操作符', type: 'select', required: true,
+          options: [
+            { label: '等于 (=)', value: 'eq' },
+            { label: '不等于 (!=)', value: 'ne' },
+            { label: '大于 (>)', value: 'gt' },
+            { label: '大于等于 (>=)', value: 'gte' },
+            { label: '小于 (<)', value: 'lt' },
+            { label: '小于等于 (<=)', value: 'lte' },
+            { label: '包含 (contains)', value: 'contains' },
+            { label: '属于 (in)', value: 'in' },
+          ]},
+        { key: 'value', label: '比较值', type: 'string', required: true, placeholder: '如: 100' },
+      ]},
+    { key: 'dedup', label: '防抖设置', type: 'json',
+      placeholder: '{"enabled":true,"windowMinutes":60,"maxCount":1,"keyFields":["member_id","event_type"]}' },
+    { key: 'validFrom', label: '生效开始时间', type: 'string', placeholder: '如: 2026-01-01T00:00:00Z' },
+    { key: 'validTo', label: '生效结束时间', type: 'string', placeholder: '如: 2026-12-31T23:59:59Z' },
+    // Webhook 安全配置（eventSource=webhook 时显示）
+    { key: 'webhookApiKey', label: 'Webhook API Key', type: 'string',
+      placeholder: '自动生成，用于外部系统调用认证' },
+    { key: 'webhookSigningSecret', label: 'HMAC 签名密钥', type: 'string',
+      placeholder: '用于验证回调签名，防止伪造' },
+    { key: 'webhookIpWhitelist', label: 'IP 白名单', type: 'array', defaultValue: [],
+      itemSchema: [{ key: 'cidr', label: 'CIDR/IP', type: 'string', placeholder: '如: 192.168.1.0/24' }] },
+    { key: 'webhookFieldMapping', label: '字段映射 (JSON)', type: 'json',
+      placeholder: '{"memberId":"data.user_id","eventType":"event_name","payload":"data.attributes"}' },
+  ],
+  WAIT_EVENT: [
+    { key: 'eventType', label: '等待事件类型', type: 'select', required: true,
+      options: [
+        { label: '订单创建 (ORDER_CREATED)', value: 'ORDER_CREATED' },
+        { label: '支付确认 (PAYMENT_CONFIRMED)', value: 'PAYMENT_CONFIRMED' },
+        { label: '等级变更 (TIER_CHANGED)', value: 'TIER_CHANGED' },
+        { label: '自定义事件 (CUSTOM)', value: 'CUSTOM' },
+      ]},
+    { key: 'timeout', label: '超时时间(毫秒)', type: 'number', placeholder: '默认 86400000 (24小时)' },
+    { key: 'timeoutAction', label: '超时行为', type: 'select',
+      options: [
+        { label: '继续执行 (continue)', value: 'continue' },
+        { label: '标记失败 (fail)', value: 'fail' },
+        { label: '跳过节点 (skip)', value: 'skip' },
+      ]},
+  ],
+  EXPERIMENT: [
+    { key: 'experimentName', label: '实验名称', type: 'string', required: true,
+      placeholder: '如: 邮件主题行测试' },
+    { key: 'objectiveMetric', label: '目标指标', type: 'select', required: true,
+      options: [
+        { label: '点击率 (CLICK_RATE)', value: 'CLICK_RATE' },
+        { label: '转化率 (CONVERSION_RATE)', value: 'CONVERSION_RATE' },
+        { label: '人均收入 (REVENUE_PER_USER)', value: 'REVENUE_PER_USER' },
+        { label: '打开率 (OPEN_RATE)', value: 'OPEN_RATE' },
+      ]},
+    { key: 'objectiveDirection', label: '优化方向', type: 'select', required: true,
+      options: [
+        { label: '越高越好 (HIGHER)', value: 'HIGHER' },
+        { label: '越低越好 (LOWER)', value: 'LOWER' },
+      ]},
+    { key: 'trafficAllocationPct', label: '实验流量(%)', type: 'number',
+      placeholder: '默认 100（所有进入节点的用户都参与）' },
+    { key: 'totalSampleSize', label: '最大样本量', type: 'number',
+      placeholder: '留空表示持续运行直到手动停止' },
+    { key: 'variants', label: '变体配置', type: 'array', required: true, defaultValue: [
+      { name: '控制组', code: 'A', trafficPercentage: 50 },
+      { name: '变体B', code: 'B', trafficPercentage: 50 },
+    ],
+      itemSchema: [
+        { key: 'name', label: '变体名称', type: 'string', required: true,
+          placeholder: '如: 控制组 / 变体A' },
+        { key: 'code', label: '变体代码', type: 'string', required: true,
+          placeholder: 'A / B / C' },
+        { key: 'trafficPercentage', label: '流量比例(%)', type: 'number', required: true,
+          placeholder: '如: 50' },
+        { key: 'nodeOverrides', label: '节点配置覆盖', type: 'json',
+          placeholder: '{"SEND_EMAIL":{"asset_id":"asset_002"}}' },
+      ]},
+    { key: 'minimumDetectableEffect', label: '最小可检测效应(%)', type: 'number',
+      placeholder: '如: 5（表示相对提升5%）' },
+    { key: 'statisticalSignificance', label: '显著性水平', type: 'number',
+      placeholder: '默认 0.95 (95%)' },
+    { key: 'autoPromoteWinner', label: '自动推全胜者', type: 'boolean', defaultValue: false },
+    { key: 'autoPromoteDelayMinutes', label: '推全等待(分钟)', type: 'number',
+      placeholder: '默认 1440 (24小时)' },
+  ],
 };
 
 // ==================== Edge Config Form ====================
@@ -834,10 +944,10 @@ const CampaignCanvasEditor: React.FC = () => {
                 <Button type="text" size="small" onClick={() => setPaletteOpen(false)}
                   style={{ width: 20, height: 20, padding: 0, fontSize: 14, lineHeight: 1 }}>×</Button>
               </div>
-              {['flow', 'channel', 'action', 'ai', 'governance', 'integration'].map((category, ci) => {
+              {['flow', 'input', 'logic', 'ai', 'control', 'action', 'channel', 'end'].map((category, ci) => {
                 const catNodes = nodeTypesList.filter((n: any) => n.category === category);
                 if (catNodes.length === 0) return null;
-                const catLabels: Record<string, string> = { flow: '流程', channel: '渠道', action: '动作', ai: 'AI', governance: '治理', integration: '集成' };
+                const catLabels: Record<string, string> = { flow: '流程', input: '输入', logic: '逻辑', ai: 'AI', control: '控制', action: '动作', channel: '渠道', end: '结束' };
                 return (
                   <div key={category}>
                     {ci > 0 && <div style={{ height: 1, background: '#f0f0f0', margin: '4px 12px' }} />}

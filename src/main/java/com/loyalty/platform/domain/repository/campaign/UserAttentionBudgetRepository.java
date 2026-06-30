@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Repository
-public interface UserAttentionBudgetRepository extends BaseRepository<UserAttentionBudget, UserAttentionBudgetId> {
+public interface UserAttentionBudgetRepository extends CampaignBaseRepository<UserAttentionBudget, UserAttentionBudgetId> {
 
     UserAttentionBudget findByUserIdAndDateAndChannel(String userId, LocalDate date, String channel);
 

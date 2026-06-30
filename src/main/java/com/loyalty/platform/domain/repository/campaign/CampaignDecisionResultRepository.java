@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface CampaignDecisionResultRepository extends BaseRepository<CampaignDecisionResult, String> {
+public interface CampaignDecisionResultRepository extends CampaignBaseRepository<CampaignDecisionResult, String> {
 
     /** 查找 Portfolio 下最新的决策结果 */
     @Query("SELECT d FROM CampaignDecisionResult d WHERE d.portfolioId = :portfolioId ORDER BY d.createdAt DESC")

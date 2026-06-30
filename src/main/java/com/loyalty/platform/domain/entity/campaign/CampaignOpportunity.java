@@ -89,6 +89,19 @@ public class CampaignOpportunity {
     @Column(name = "source", nullable = false, length = 32)
     private String source;
 
+    /** 如果是 REALTIME 来源，记录触发事件类型 */
+    @Column(name = "event_type", length = 64)
+    private String eventType;
+
+    /** 事件原始数据快照 */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "event_payload", columnDefinition = "jsonb")
+    private String eventPayload;
+
+    /** 紧迫度评分（实时机会通常比批量更紧迫） */
+    @Column(name = "urgency_score", precision = 5, scale = 2)
+    private BigDecimal urgencyScore;
+
     @Column(name = "detected_at")
     @Builder.Default
     private Instant detectedAt = Instant.now();

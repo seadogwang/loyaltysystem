@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CampaignExecutionMasterRepository extends BaseRepository<CampaignExecutionMaster, String> {
+public interface CampaignExecutionMasterRepository extends CampaignBaseRepository<CampaignExecutionMaster, String> {
 
     List<CampaignExecutionMaster> findByPlanIdOrderByStartTimeDesc(String planId);
     List<CampaignExecutionMaster> findByStatusOrderByStartTimeDesc(String status);

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface CampaignFeedbackMetricsRepository extends BaseRepository<CampaignFeedbackMetrics, String> {
+public interface CampaignFeedbackMetricsRepository extends CampaignBaseRepository<CampaignFeedbackMetrics, String> {
 
     Optional<CampaignFeedbackMetrics> findFirstByPlanIdOrderByCalculatedAtDesc(String planId);
 

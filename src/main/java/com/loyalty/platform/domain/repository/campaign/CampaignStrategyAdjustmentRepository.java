@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignStrategyAdjustmentRepository extends BaseRepository<CampaignStrategyAdjustment, String> {
+public interface CampaignStrategyAdjustmentRepository extends CampaignBaseRepository<CampaignStrategyAdjustment, String> {
 
     List<CampaignStrategyAdjustment> findByWorkspaceIdOrderByCreatedAtDesc(String workspaceId);
 

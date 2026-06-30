@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.List;
 
 @Repository
-public interface CampaignAttentionConsumptionRepository extends BaseRepository<CampaignAttentionConsumption, String> {
+public interface CampaignAttentionConsumptionRepository extends CampaignBaseRepository<CampaignAttentionConsumption, String> {
 
     /** 查找用户的消费记录（分页，最新在前） */
     Page<CampaignAttentionConsumption> findByUserIdOrderByConsumedAtDesc(String userId, Pageable pageable);

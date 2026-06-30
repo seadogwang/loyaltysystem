@@ -52,6 +52,11 @@ public class DecisionEngineService {
     private static final double WEIGHT_STRATEGIC = 0.2;
     private static final double WEIGHT_RECENCY = 0.1;
 
+    /** 事件驱动 Campaign 的优先级加成系数 */
+    private static final double EVENT_TRIGGER_PRIORITY_BOOST = 1.25;
+    /** 混合模式 Campaign 的优先级加成系数 */
+    private static final double HYBRID_PRIORITY_BOOST = 1.10;
+
     private static final double MIN_ROI_THRESHOLD = 1.2;
     private static final int MAX_BUDGET_ITERATIONS = 1000;
 
@@ -65,6 +70,7 @@ public class DecisionEngineService {
     private final CampaignBudgetAllocationRepository budgetAllocationRepository;
     private final CampaignArbitrationLogRepository arbitrationLogRepository;
     private final CampaignOpportunityRepository opportunityRepository;
+    private final CampaignPlanRepository planRepository;
     private final InitiativeService initiativeService;
     private final PortfolioService portfolioService;
     private final WorkspaceService workspaceService;
@@ -77,6 +83,7 @@ public class DecisionEngineService {
                                   CampaignBudgetAllocationRepository budgetAllocationRepository,
                                   CampaignArbitrationLogRepository arbitrationLogRepository,
                                   CampaignOpportunityRepository opportunityRepository,
+                                  CampaignPlanRepository planRepository,
                                   InitiativeService initiativeService,
                                   PortfolioService portfolioService,
                                   WorkspaceService workspaceService,
@@ -88,6 +95,7 @@ public class DecisionEngineService {
         this.budgetAllocationRepository = budgetAllocationRepository;
         this.arbitrationLogRepository = arbitrationLogRepository;
         this.opportunityRepository = opportunityRepository;
+        this.planRepository = planRepository;
         this.initiativeService = initiativeService;
         this.portfolioService = portfolioService;
         this.workspaceService = workspaceService;
@@ -277,6 +285,12 @@ public class DecisionEngineService {
                     ? (String) initiative.getRuleConfig().get("segment")
                     : null;
 
+            // 获取关联 Plans 的触发类型（事件驱动营销）
+            List<CampaignPlan> plans = planRepository.findByInitiativeId(initiative.getId());
+            String dominantTriggerType = determineDominantTriggerType(plans);
+            BigDecimal avgCostPerTrigger = calculateAvgCostPerTrigger(plans);
+            Integer totalEstimatedTriggers = sumEstimatedTriggers(plans);
+
             candidates.add(DecisionCandidateInternal.builder()
                     .initiativeId(initiative.getId())
                     .initiativeName(initiative.getName())
@@ -296,6 +310,9 @@ public class DecisionEngineService {
                     .maxBudget(maxBudget)
                     .strategicWeight(strategicWeight)
                     .recencyBoost(calculateRecencyBoost(opportunities))
+                    .triggerType(dominantTriggerType)
+                    .costPerTrigger(avgCostPerTrigger)
+                    .estimatedTriggerCount(totalEstimatedTriggers)
                     .build());
         }
 
@@ -912,10 +929,20 @@ public class DecisionEngineService {
         double strategic = candidate.getStrategicWeight() != null ? candidate.getStrategicWeight() : 0.5;
         double recency = candidate.getRecencyBoost() != null ? candidate.getRecencyBoost() : 0.5;
 
-        return WEIGHT_ROI * normalizedROI
+        double baseScore = WEIGHT_ROI * normalizedROI
                 + WEIGHT_OPPORTUNITY * oppScore
                 + WEIGHT_STRATEGIC * strategic
                 + WEIGHT_RECENCY * recency;
+
+        // 事件驱动优先级加成：实时触发的 Campaign 在冲突中获得更高优先级
+        double boost = 1.0;
+        if ("EVENT_TRIGGERED".equals(candidate.getTriggerType())) {
+            boost = EVENT_TRIGGER_PRIORITY_BOOST;
+        } else if ("HYBRID".equals(candidate.getTriggerType())) {
+            boost = HYBRID_PRIORITY_BOOST;
+        }
+
+        return Math.min(baseScore * boost, 1.0);
     }
 
     /** 将 ROI 归一化到 0-1 区间 */
@@ -1110,6 +1137,51 @@ public class DecisionEngineService {
     }
 
     // ========================================================================
+    // 事件驱动营销辅助方法
+    // ========================================================================
+
+    /**
+     * 确定 Initiative 的主导触发类型。
+     * 优先返回事件驱动类型（EVENT_TRIGGERED > HYBRID > SCHEDULED > MANUAL）。
+     */
+    private String determineDominantTriggerType(List<CampaignPlan> plans) {
+        if (plans == null || plans.isEmpty()) return "MANUAL";
+        for (CampaignPlan plan : plans) {
+            if ("EVENT_TRIGGERED".equals(plan.getTriggerType())) return "EVENT_TRIGGERED";
+        }
+        for (CampaignPlan plan : plans) {
+            if ("HYBRID".equals(plan.getTriggerType())) return "HYBRID";
+        }
+        for (CampaignPlan plan : plans) {
+            if ("SCHEDULED".equals(plan.getTriggerType())) return "SCHEDULED";
+        }
+        return "MANUAL";
+    }
+
+    /**
+     * 计算平均单次触发成本。
+     */
+    private BigDecimal calculateAvgCostPerTrigger(List<CampaignPlan> plans) {
+        if (plans == null || plans.isEmpty()) return null;
+        return plans.stream()
+                .filter(p -> p.getCostPerTrigger() != null)
+                .map(CampaignPlan::getCostPerTrigger)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(Math.max(1, plans.size())), 4, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 汇总预估触发次数。
+     */
+    private Integer sumEstimatedTriggers(List<CampaignPlan> plans) {
+        if (plans == null || plans.isEmpty()) return 0;
+        return plans.stream()
+                .filter(p -> p.getEstimatedTriggerCount() != null)
+                .mapToInt(CampaignPlan::getEstimatedTriggerCount)
+                .sum();
+    }
+
+    // ========================================================================
     // 内部数据类型
     // ========================================================================
 
@@ -1132,6 +1204,12 @@ public class DecisionEngineService {
         private BigDecimal maxBudget;
         private Double strategicWeight;
         private Double recencyBoost;
+        /** MANUAL / EVENT_TRIGGERED / SCHEDULED / HYBRID — 事件驱动优先级加成 */
+        private String triggerType;
+        /** 单次触发成本（事件驱动模式） */
+        private BigDecimal costPerTrigger;
+        /** 预估触发次数（事件驱动模式） */
+        private Integer estimatedTriggerCount;
     }
 
     @lombok.Data

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignApprovalRecordRepository extends BaseRepository<CampaignApprovalRecord, String> {
+public interface CampaignApprovalRecordRepository extends CampaignBaseRepository<CampaignApprovalRecord, String> {
 
     List<CampaignApprovalRecord> findByAssetId(String assetId);
 

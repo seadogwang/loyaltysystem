@@ -63,6 +63,11 @@ public class CampaignInitiative {
     @Builder.Default
     private Map<String, Object> ruleConfig = new LinkedHashMap<>();
 
+    /** 策略拆解完整归因 */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "analysis_json", columnDefinition = "jsonb")
+    private String analysisJson;
+
     @Column(name = "created_by", length = 64)
     private String createdBy;
 

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignPortfolioKpiRepository extends BaseRepository<CampaignPortfolioKpi, String> {
+public interface CampaignPortfolioKpiRepository extends CampaignBaseRepository<CampaignPortfolioKpi, String> {
 
     List<CampaignPortfolioKpi> findByPortfolioId(String portfolioId);
 }

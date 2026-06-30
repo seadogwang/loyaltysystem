@@ -61,6 +61,23 @@ public class CampaignGoal {
     @Column(name = "end_time")
     private LocalDateTime endTime;
 
+    /** 行业类型: RETAIL / SAAS / FINANCE / EDUCATION / AUTO / ECOMMERCE */
+    @Column(name = "industry_type", length = 64)
+    private String industryType;
+
+    /** 关联策略蓝图ID */
+    @Column(name = "blueprint_id", length = 64)
+    private String blueprintId;
+
+    /** 策略工作流状态 */
+    @Column(name = "workflow_status", length = 32)
+    @Builder.Default
+    private String workflowStatus = "GOAL_DRAFT";
+
+    /** 平均客单价 */
+    @Column(name = "avg_order_value", precision = 18, scale = 4)
+    private BigDecimal avgOrderValue;
+
     @Column(name = "created_by", length = 64)
     private String createdBy;
 

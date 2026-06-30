@@ -477,7 +477,7 @@ public class AdminController {
     // ==================== 规则管理 ====================
 
     /**
-     * 规则列表 — 支持 ?status=DRAFT|ACTIVE|INACTIVE 过滤
+     * 规则列表 — 支持 ?status=DRAFT|ACTIVE|ARCHIVED 过滤
      */
     @GetMapping("/rules")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> listRules(
@@ -737,14 +737,14 @@ public class AdminController {
         if (rule == null) {
             return ResponseEntity.ok(ApiResponse.error("ERR_NOT_FOUND", "规则不存在"));
         }
-        rule.setStatus("INACTIVE");
+        rule.setStatus("ARCHIVED");
         rule.setUpdatedAt(LocalDateTime.now());
         ruleRepo.save(rule);
 
         try { kieBaseCacheManager.refreshKieBase(pc); } catch (Exception ignored) {}
 
         log.info("[Admin] 规则停用: id={}", id);
-        return ResponseEntity.ok(ApiResponse.success(Map.of("id", id, "status", "INACTIVE")));
+        return ResponseEntity.ok(ApiResponse.success(Map.of("id", id, "status", "ARCHIVED")));
     }
 
     /**

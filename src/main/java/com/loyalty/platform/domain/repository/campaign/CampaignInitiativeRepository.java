@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignInitiativeRepository extends BaseRepository<CampaignInitiative, String> {
+public interface CampaignInitiativeRepository extends CampaignBaseRepository<CampaignInitiative, String> {
 
     List<CampaignInitiative> findByWorkspaceId(String workspaceId);
 

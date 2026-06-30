@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignVariableBindingRepository extends BaseRepository<CampaignVariableBinding, String> {
+public interface CampaignVariableBindingRepository extends CampaignBaseRepository<CampaignVariableBinding, String> {
 
     List<CampaignVariableBinding> findByProgramCodeAndAssetIdOrderByPriorityAsc(String programCode, String assetId);
 

@@ -8,7 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignNodeDefinitionRepository extends BaseRepository<CampaignNodeDefinition, String> {
+public interface CampaignNodeDefinitionRepository extends CampaignBaseRepository<CampaignNodeDefinition, String> {
 
     List<CampaignNodeDefinition> findByStatusOrderByCategoryAsc(String status);
 

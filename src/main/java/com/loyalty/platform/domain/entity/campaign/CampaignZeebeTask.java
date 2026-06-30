@@ -77,6 +77,28 @@ public class CampaignZeebeTask {
     @Builder.Default
     private Instant createdAt = Instant.now();
 
+    // ===== DLQ 死信队列扩展 =====
+    @Column(name = "is_dlq")
+    @Builder.Default
+    private boolean isDlq = false;
+
+    @Column(name = "dlq_reason", columnDefinition = "TEXT")
+    private String dlqReason;
+
+    @Column(name = "dlq_archived")
+    @Builder.Default
+    private boolean dlqArchived = false;
+
+    @Column(name = "dlq_archived_at")
+    private Instant dlqArchivedAt;
+
+    @Column(name = "replayed_count")
+    @Builder.Default
+    private Integer replayedCount = 0;
+
+    @Column(name = "original_job_key")
+    private Long originalJobKey;
+
     @Column(name = "updated_at")
     @Builder.Default
     private Instant updatedAt = Instant.now();

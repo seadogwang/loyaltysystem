@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface CampaignGlobalControlRepository extends BaseRepository<CampaignGlobalControl, String> {
+public interface CampaignGlobalControlRepository extends CampaignBaseRepository<CampaignGlobalControl, String> {
 
     Optional<CampaignGlobalControl> findByProgramCode(String programCode);
 }

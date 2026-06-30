@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8081
 
 spring:
   application:
@@ -24,7 +24,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: none  # 生产环境使用 validate，本地测试先用 none
+      ddl-auto: update  # 开发环境自动同步表结构
     show-sql: false
     properties:
       hibernate:
@@ -85,6 +85,7 @@ loyalty:
     # 租户隔离模式: strict (生产) / lenient (本地开发)
     isolation-mode: strict
     # 多租户表名列表（拦截器自动注入 program_code）— 共享配置源
+    # 注意: program 表已通过 ALTER TABLE 添加 program_code 列
     multi-tenant-tables:
       - program
       - member

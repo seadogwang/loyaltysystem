@@ -9,7 +9,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8081',
         changeOrigin: true,
         proxyReq: (proxyReq, req) => {
           // 禁用压缩以支持 SSE 流式传输

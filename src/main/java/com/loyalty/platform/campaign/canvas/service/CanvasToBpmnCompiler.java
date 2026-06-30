@@ -51,8 +51,27 @@ public class CanvasToBpmnCompiler {
         bpmn.append("  targetNamespace=\"http://loyalty.campaign\">\n");
         bpmn.append("  <bpmn:process id=\"campaign_process\" isExecutable=\"true\">\n");
 
-        // Start Event
-        bpmn.append("    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\"/>\n");
+        // 检测第一个节点是否为 EVENT_TRIGGER（事件驱动模式）
+        CanvasNode firstNode = !sorted.isEmpty() ? nodeMap.get(sorted.get(0)) : null;
+        boolean isEventDriven = firstNode != null && "EVENT_TRIGGER".equals(firstNode.getType());
+
+        if (isEventDriven) {
+            // 事件驱动：生成 Message Start Event
+            String eventType = getNodeConfigField(firstNode, "eventType", "loyalty_event");
+            String messageName = "campaign_trigger_" + dag.getNodes().stream()
+                    .findFirst().map(CanvasNode::getId).orElse("unknown") + "_" + eventType;
+            bpmn.append("    <bpmn:startEvent id=\"StartEvent_1\" name=\"Event Start: ").append(eventType).append("\">\n");
+            bpmn.append("      <bpmn:messageEventDefinition id=\"MessageEventDef_1\"");
+            bpmn.append(" messageRef=\"Message_").append(eventType).append("\" />\n");
+            bpmn.append("    </bpmn:startEvent>\n");
+
+            // 声明 Message
+            bpmn.append("    <bpmn:message id=\"Message_").append(eventType).append("\"");
+            bpmn.append(" name=\"").append(messageName).append("\" />\n");
+        } else {
+            // 批处理：标准 Start Event
+            bpmn.append("    <bpmn:startEvent id=\"StartEvent_1\" name=\"Start\"/>\n");
+        }
 
         // 按拓扑顺序生成节点
         String previousId = "StartEvent_1";
@@ -89,7 +108,8 @@ public class CanvasToBpmnCompiler {
         bpmn.append("</bpmn:definitions>");
 
         String result = bpmn.toString();
-        log.info("BPMN compilation completed: {} nodes compiled", sorted.size());
+        log.info("BPMN compilation completed: {} nodes compiled, mode={}",
+                sorted.size(), isEventDriven ? "EVENT_DRIVEN" : "BATCH");
         return result;
     }
 
@@ -150,6 +170,21 @@ public class CanvasToBpmnCompiler {
                 "    <bpmn:serviceTask id=\"" + bpmnId + "\" name=\"" + name + "\">\n" +
                 "      <zeebe:taskDefinition type=\"campaign-tier-upgrade\" />\n" +
                 "    </bpmn:serviceTask>\n";
+            case "EVENT_TRIGGER" ->
+                // EVENT_TRIGGER 作为第一个节点时已生成 Message Start Event，
+                // 此处作为流程中的节点时生成事件接收 service task
+                "    <bpmn:serviceTask id=\"" + bpmnId + "\" name=\"" + name + "\">\n" +
+                "      <zeebe:taskDefinition type=\"campaign-event-receiver\" />\n" +
+                "    </bpmn:serviceTask>\n";
+            case "WAIT_EVENT" ->
+                "    <bpmn:intermediateCatchEvent id=\"" + bpmnId + "\" name=\"" + name + "\">\n" +
+                "      <bpmn:messageEventDefinition id=\"WaitEvent_" + bpmnId + "\" />\n" +
+                "    </bpmn:intermediateCatchEvent>\n";
+            case "EXPERIMENT" ->
+                // EXPERIMENT → ServiceTask (router) + 输出 variantId/variantCode
+                "    <bpmn:serviceTask id=\"" + bpmnId + "\" name=\"" + name + "\">\n" +
+                "      <zeebe:taskDefinition type=\"campaign-experiment-router\" />\n" +
+                "    </bpmn:serviceTask>\n";
             default -> // SEND_EMAIL, SEND_SMS, SEND_PUSH
                 "    <bpmn:serviceTask id=\"" + bpmnId + "\" name=\"" + name + "\">\n" +
                 "      <zeebe:taskDefinition type=\"campaign-send-" + type.toLowerCase().replace("send_", "") + "\" />\n" +
@@ -168,5 +203,26 @@ public class CanvasToBpmnCompiler {
         }
         return "    <bpmn:sequenceFlow id=\"" + flowId + "\" sourceRef=\"" + fromId +
                "\" targetRef=\"" + toId + "\"/>\n";
+    }
+
+    /**
+     * 从节点配置中提取字符串字段值。
+     */
+    @SuppressWarnings("unchecked")
+    private String getNodeConfigField(CanvasNode node, String field, String defaultValue) {
+        if (node.getConfig() == null) return defaultValue;
+        try {
+            Object config = node.getConfig();
+            if (config instanceof Map) {
+                Object value = ((Map<String, Object>) config).get(field);
+                return value != null ? value.toString() : defaultValue;
+            }
+            // 如果 config 是 JSON 字符串
+            JsonNode configNode = objectMapper.readTree(config.toString());
+            JsonNode fieldNode = configNode.get(field);
+            return fieldNode != null && !fieldNode.isNull() ? fieldNode.asText() : defaultValue;
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 }

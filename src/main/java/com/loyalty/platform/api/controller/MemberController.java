@@ -314,16 +314,18 @@ public class MemberController {
     }
 
     @PostMapping("/{memberId}/freeze")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> freeze(@PathVariable Long memberId) {
         String pc = TenantContext.getRequired();
         Optional<Member> opt = memberRepo.findByMemberId(pc, memberId);
         if (opt.isEmpty()) return ResponseEntity.ok(ApiResponse.error("ERR_NOT_FOUND", "会员不存在"));
-        opt.get().setStatus("FROZEN_REDEMPTION");
+        opt.get().setStatus("SUSPENDED");
         memberRepo.save(opt.get());
         return ResponseEntity.ok(ApiResponse.success("已冻结", null));
     }
 
     @PostMapping("/{memberId}/unfreeze")
+    @Transactional
     public ResponseEntity<ApiResponse<Void>> unfreeze(@PathVariable Long memberId) {
         String pc = TenantContext.getRequired();
         Optional<Member> opt = memberRepo.findByMemberId(pc, memberId);
@@ -334,6 +336,7 @@ public class MemberController {
     }
 
     @PostMapping("/merge")
+    @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> merge(@RequestBody Map<String, Object> body) {
         String pc = TenantContext.getRequired();
         Long mainId = Long.valueOf(body.get("mainMemberId").toString());

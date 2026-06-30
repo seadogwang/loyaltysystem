@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CampaignInitiativeKpiRepository extends BaseRepository<CampaignInitiativeKpi, String> {
+public interface CampaignInitiativeKpiRepository extends CampaignBaseRepository<CampaignInitiativeKpi, String> {
 
     List<CampaignInitiativeKpi> findByInitiativeId(String initiativeId);
 

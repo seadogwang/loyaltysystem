@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignBudgetAllocationRepository extends BaseRepository<CampaignBudgetAllocation, String> {
+public interface CampaignBudgetAllocationRepository extends CampaignBaseRepository<CampaignBudgetAllocation, String> {
 
     /** 查找某个决策下的所有分配明细 */
     List<CampaignBudgetAllocation> findByDecisionId(String decisionId);

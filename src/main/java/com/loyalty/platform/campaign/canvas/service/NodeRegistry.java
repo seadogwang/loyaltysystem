@@ -29,6 +29,7 @@ public class NodeRegistry {
         register("AI_PLANNER", "AI 规划", "ai", "AI 自动生成营销策略", Set.of("goalType", "budget"));
         register("DELAY", "延迟等待", "control", "等待指定时间", Set.of("duration", "unit"));
         register("WAIT_EVENT", "事件等待", "control", "等待指定事件触发", Set.of("eventType", "timeout"));
+        register("EXPERIMENT", "A/B实验", "logic", "A/B测试实验分流节点", Set.of("experimentName", "objectiveMetric", "variants", "trafficAllocationPct"));
         register("SEND_EMAIL", "发送邮件", "action", "通过邮件发送消息", Set.of("assetId", "subjectLine", "retryCount", "rateLimit", "requireApproval"));
         register("SEND_SMS", "发送短信", "action", "通过短信发送消息", Set.of("assetId", "templateId", "retryCount"));
         register("SEND_PUSH", "发送推送", "action", "通过推送发送消息", Set.of("assetId", "title", "body"));

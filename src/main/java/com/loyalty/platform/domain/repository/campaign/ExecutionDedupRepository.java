@@ -10,7 +10,7 @@ import org.springframework.stereotype.Repository;
 import java.time.Instant;
 
 @Repository
-public interface ExecutionDedupRepository extends BaseRepository<ExecutionDedup, String> {
+public interface ExecutionDedupRepository extends CampaignBaseRepository<ExecutionDedup, String> {
 
     boolean existsByDedupKey(String dedupKey);
 

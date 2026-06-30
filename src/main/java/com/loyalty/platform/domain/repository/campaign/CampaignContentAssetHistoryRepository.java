@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignContentAssetHistoryRepository extends BaseRepository<CampaignContentAssetHistory, String> {
+public interface CampaignContentAssetHistoryRepository extends CampaignBaseRepository<CampaignContentAssetHistory, String> {
 
     List<CampaignContentAssetHistory> findByAssetIdOrderByVersionDesc(String assetId);
 }

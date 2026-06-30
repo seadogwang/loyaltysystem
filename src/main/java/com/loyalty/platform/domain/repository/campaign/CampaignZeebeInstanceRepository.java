@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CampaignZeebeInstanceRepository extends BaseRepository<CampaignZeebeInstance, String> {
+public interface CampaignZeebeInstanceRepository extends CampaignBaseRepository<CampaignZeebeInstance, String> {
 
     Optional<CampaignZeebeInstance> findByProcessInstanceKey(Long processInstanceKey);
 

@@ -7,7 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface CampaignSimulationScenarioRepository extends BaseRepository<CampaignSimulationScenario, String> {
+public interface CampaignSimulationScenarioRepository extends CampaignBaseRepository<CampaignSimulationScenario, String> {
 
     Page<CampaignSimulationScenario> findByWorkspaceIdOrderByCreatedAtDesc(String workspaceId, Pageable pageable);
 

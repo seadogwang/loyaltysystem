@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
-public interface ExternalSignalRepository extends BaseRepository<ExternalSignal, String> {
+public interface ExternalSignalRepository extends CampaignBaseRepository<ExternalSignal, String> {
 
     List<ExternalSignal> findByProgramCode(String programCode);
 

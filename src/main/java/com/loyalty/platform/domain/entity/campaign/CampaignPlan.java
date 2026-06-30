@@ -77,6 +77,38 @@ public class CampaignPlan {
     @Column(name = "zeebe_instance_key")
     private Long zeebeInstanceKey;
 
+    // ===== 触发方式扩展（事件驱动营销） =====
+
+    /** MANUAL / EVENT_TRIGGERED / SCHEDULED / HYBRID */
+    @Column(name = "trigger_type", length = 32)
+    @Builder.Default
+    private String triggerType = "MANUAL";
+
+    /** 关联 campaign_event_trigger.id */
+    @Column(name = "trigger_config_id", length = 64)
+    private String triggerConfigId;
+
+    /** 预估触发次数（用于预算分配） */
+    @Column(name = "estimated_trigger_count")
+    private Integer estimatedTriggerCount;
+
+    /** 单次触发成本 */
+    @Column(name = "cost_per_trigger", precision = 18, scale = 4)
+    private BigDecimal costPerTrigger;
+
+    // ===== 跨Program共享 =====
+
+    @Column(name = "is_cross_program")
+    @Builder.Default
+    private boolean isCrossProgram = false;
+
+    @Column(name = "sharing_scope", length = 32)
+    @Builder.Default
+    private String sharingScope = "OWN";
+
+    @Column(name = "owner_program_code", length = 32)
+    private String ownerProgramCode;
+
     @Column(name = "created_by", length = 64)
     private String createdBy;
 

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignContentAssetRepository extends BaseRepository<CampaignContentAsset, String> {
+public interface CampaignContentAssetRepository extends CampaignBaseRepository<CampaignContentAsset, String> {
 
     List<CampaignContentAsset> findByProgramCode(String programCode);
 

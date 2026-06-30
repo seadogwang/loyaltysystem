@@ -68,6 +68,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error("ERR_TENANT_REQUIRED", e.getMessage()));
     }
 
+    /** 资源未找到 → HTTP 200 + ERR_NOT_FOUND */
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(ResourceNotFoundException e, HttpServletRequest request) {
+        log.warn("[API] 资源未找到: message={}, path={}", e.getMessage(), request.getRequestURI());
+        return ResponseEntity.ok(ApiResponse.error("ERR_NOT_FOUND", e.getMessage()));
+    }
+
     /** 未分类异常 → HTTP 200（兜底，避免 P0 事故） */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnknown(Exception e, HttpServletRequest request) {

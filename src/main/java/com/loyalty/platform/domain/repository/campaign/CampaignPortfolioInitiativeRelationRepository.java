@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignPortfolioInitiativeRelationRepository extends BaseRepository<CampaignPortfolioInitiativeRelation, String> {
+public interface CampaignPortfolioInitiativeRelationRepository extends CampaignBaseRepository<CampaignPortfolioInitiativeRelation, String> {
 
     List<CampaignPortfolioInitiativeRelation> findByPortfolioId(String portfolioId);
 

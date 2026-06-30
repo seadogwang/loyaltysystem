@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CampaignWorkspaceRepository extends BaseRepository<CampaignWorkspace, String> {
+public interface CampaignWorkspaceRepository extends CampaignBaseRepository<CampaignWorkspace, String> {
 
     List<CampaignWorkspace> findByProgramCode(String programCode);
 

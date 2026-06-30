@@ -57,12 +57,16 @@ export type NodeType =
   | 'AI_SCORE' | 'AI_PLANNER'
   | 'SEND_EMAIL' | 'SEND_SMS' | 'SEND_PUSH'
   | 'OFFER_POINTS' | 'OFFER_COUPON' | 'TIER_UPGRADE' | 'WEBHOOK'
-  | 'DELAY' | 'WAIT_EVENT' | 'APPROVAL' | 'END';
+  | 'DELAY' | 'WAIT_EVENT' | 'APPROVAL' | 'END'
+  | 'EXPERIMENT';
 
 export type NodeConfig =
   | AudienceFilterConfig | ConditionConfig | AIScoreConfig
   | SendEmailConfig | OfferPointsConfig | DelayConfig
-  | ApprovalConfig | WebhookConfig | Record<string, any>;
+  | ApprovalConfig | WebhookConfig
+  | EventTriggerNodeConfig | WaitEventNodeConfig
+  | ExperimentNodeConfig
+  | Record<string, any>;
 
 export interface AudienceFilterConfig {
   logic: 'AND' | 'OR';
@@ -125,4 +129,71 @@ export interface ApprovalConfig {
 export interface WebhookConfig {
   url: string; method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   headers?: Record<string, string>; bodyTemplate?: string; retryCount?: number;
+}
+
+/**
+ * 事件触发节点配置 — 监听外部事件启动流程。
+ * 事件驱动营销的核心入口节点。
+ */
+export interface EventTriggerNodeConfig {
+  /** 事件来源 */
+  eventSource: 'loyalty_event' | 'kafka_topic' | 'custom_webhook';
+  /** 事件类型 */
+  eventType: string;
+  /** Kafka Topic（eventSource=kafka_topic 时必填） */
+  kafkaTopic?: string;
+  /** 事件过滤条件 */
+  eventFilters?: EventFilterCondition[];
+  /** 防抖设置 */
+  dedup: {
+    enabled: boolean;
+    windowMinutes: number;
+    maxCount: number;
+    keyFields: string[];
+  };
+  /** 生效时间范围 */
+  validFrom?: string;
+  validTo?: string;
+}
+
+export interface EventFilterCondition {
+  field: string;
+  operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains';
+  value: any;
+}
+
+/**
+ * A/B测试实验节点配置 — 画布原生支持实验分流。
+ */
+export interface ExperimentNodeConfig {
+  experimentName: string;
+  objectiveMetric: 'CLICK_RATE' | 'CONVERSION_RATE' | 'REVENUE_PER_USER' | 'OPEN_RATE';
+  objectiveDirection: 'HIGHER' | 'LOWER';
+  trafficAllocationPct: number;
+  totalSampleSize?: number;
+  variants: ExperimentVariantConfig[];
+  minimumDetectableEffect?: number;
+  statisticalSignificance?: number;
+  autoPromoteWinner: boolean;
+  autoPromoteDelayMinutes?: number;
+}
+
+export interface ExperimentVariantConfig {
+  id: string;
+  name: string;
+  code: string;
+  trafficPercentage: number;
+  nodeOverrides?: Record<string, any>;
+}
+
+/**
+ * 事件等待节点配置 — 暂停流程等待指定事件触发。
+ */
+export interface WaitEventNodeConfig {
+  /** 等待的事件类型 */
+  eventType: string;
+  /** 超时时间（毫秒） */
+  timeout?: number;
+  /** 超时后行为 */
+  timeoutAction?: 'continue' | 'fail' | 'skip';
 }

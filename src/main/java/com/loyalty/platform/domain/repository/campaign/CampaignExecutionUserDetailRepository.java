@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignExecutionUserDetailRepository extends BaseRepository<CampaignExecutionUserDetail, String> {
+public interface CampaignExecutionUserDetailRepository extends CampaignBaseRepository<CampaignExecutionUserDetail, String> {
 
     List<CampaignExecutionUserDetail> findByExecutionIdAndNodeId(String executionId, String nodeId);
     List<CampaignExecutionUserDetail> findByUserIdOrderByExecutedAtDesc(String userId);

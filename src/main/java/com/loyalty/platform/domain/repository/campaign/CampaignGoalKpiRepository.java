@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CampaignGoalKpiRepository extends BaseRepository<CampaignGoalKpi, String> {
+public interface CampaignGoalKpiRepository extends CampaignBaseRepository<CampaignGoalKpi, String> {
 
     List<CampaignGoalKpi> findByGoalId(String goalId);
 

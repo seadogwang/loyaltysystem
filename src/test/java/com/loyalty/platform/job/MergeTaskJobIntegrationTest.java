@@ -65,6 +65,7 @@ class MergeTaskJobIntegrationTest {
                 "SELECT id, main_member_id, duplicate_member_id "
                         + "FROM member_merge_task "
                         + "WHERE program_code = ? AND status = 'CREATED' "
+                        + "ORDER BY id DESC "
                         + "LIMIT 10 "
                         + "FOR UPDATE SKIP LOCKED",
                 Object[].class)

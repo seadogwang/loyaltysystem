@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignModelDriftRepository extends BaseRepository<CampaignModelDrift, String> {
+public interface CampaignModelDriftRepository extends CampaignBaseRepository<CampaignModelDrift, String> {
 
     List<CampaignModelDrift> findByModelNameOrderByDetectedAtDesc(String modelName);
 

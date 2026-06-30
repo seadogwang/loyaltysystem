@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignWorkspaceMemberRepository extends BaseRepository<CampaignWorkspaceMember, String> {
+public interface CampaignWorkspaceMemberRepository extends CampaignBaseRepository<CampaignWorkspaceMember, String> {
 
     List<CampaignWorkspaceMember> findByWorkspaceId(String workspaceId);
 

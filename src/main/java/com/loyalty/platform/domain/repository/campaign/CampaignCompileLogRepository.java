@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignCompileLogRepository extends BaseRepository<CampaignCompileLog, String> {
+public interface CampaignCompileLogRepository extends CampaignBaseRepository<CampaignCompileLog, String> {
 
     List<CampaignCompileLog> findByPlanIdOrderByCreatedAtDesc(String planId);
 

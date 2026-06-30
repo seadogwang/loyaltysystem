@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface CampaignSimulationResultRepository extends BaseRepository<CampaignSimulationResult, String> {
+public interface CampaignSimulationResultRepository extends CampaignBaseRepository<CampaignSimulationResult, String> {
 
     Page<CampaignSimulationResult> findByWorkspaceIdOrderByCreatedAtDesc(String workspaceId, Pageable pageable);
 

@@ -33,6 +33,10 @@ public class Program {
     @Column(name = "code", nullable = false, length = 100)
     private String code;
 
+    /** 多租户代码（与 code 同值），兼容 TenantHibernateInterceptor */
+    @Column(name = "program_code", length = 100)
+    private String programCode;
+
     /** 归属租户 ID */
     @Column(name = "tenant_id", nullable = false)
     private Long tenantId;

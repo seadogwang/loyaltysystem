@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CampaignGoalVersionRepository extends BaseRepository<CampaignGoalVersion, String> {
+public interface CampaignGoalVersionRepository extends CampaignBaseRepository<CampaignGoalVersion, String> {
 
     List<CampaignGoalVersion> findByGoalIdOrderByVersionDesc(String goalId);
 }

@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CampaignPromptTemplateRepository extends BaseRepository<CampaignPromptTemplate, String> {
+public interface CampaignPromptTemplateRepository extends CampaignBaseRepository<CampaignPromptTemplate, String> {
 
     List<CampaignPromptTemplate> findByProgramCodeAndTemplateTypeAndStatus(
             String programCode, String templateType, String status);

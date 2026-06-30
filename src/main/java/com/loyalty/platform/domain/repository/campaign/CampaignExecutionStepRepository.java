@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface CampaignExecutionStepRepository extends BaseRepository<CampaignExecutionStep, String> {
+public interface CampaignExecutionStepRepository extends CampaignBaseRepository<CampaignExecutionStep, String> {
 
     List<CampaignExecutionStep> findByExecutionIdOrderByStartTimeAsc(String executionId);
     Optional<CampaignExecutionStep> findByExecutionIdAndNodeId(String executionId, String nodeId);

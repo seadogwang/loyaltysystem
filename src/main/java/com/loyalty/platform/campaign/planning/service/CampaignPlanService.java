@@ -52,10 +52,20 @@ public class CampaignPlanService {
         if (plan.getId() == null) {
             plan.setId(UUID.randomUUID().toString());
         }
+        // 默认触发类型
+        if (plan.getTriggerType() == null) {
+            plan.setTriggerType("MANUAL");
+        }
+        // 事件驱动 Plan 必须设置单次成本
+        if ("EVENT_TRIGGERED".equals(plan.getTriggerType()) || "HYBRID".equals(plan.getTriggerType())) {
+            if (plan.getCostPerTrigger() == null) {
+                log.warn("Event-driven plan {} has no cost_per_trigger set", plan.getId());
+            }
+        }
         plan.setStatus("DRAFT");
         plan.setCreatedAt(LocalDateTime.now());
         plan = planRepository.save(plan);
-        log.info("Campaign plan created: id={}, name={}", plan.getId(), plan.getName());
+        log.info("Campaign plan created: id={}, name={}, triggerType={}", plan.getId(), plan.getName(), plan.getTriggerType());
         return plan;
     }
 

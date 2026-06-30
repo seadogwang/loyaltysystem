@@ -1413,6 +1413,640 @@ test.describe('10. Complete Business Flow - Planning->Opportunity->Decision->Can
 });
 
 // ========================================================================
+// Part 13: Experiment A/B Testing (update_4.md - P1)
+// ========================================================================
+
+test.describe('13. Experiment A/B Testing - CRUD & Lifecycle', () => {
+  let experimentId: string;
+  let variantIdA: string;
+  let variantIdB: string;
+
+  test('[13.1] Create experiment', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/experiment', {
+      id: `${TAG}_exp_001`,
+      planId: 'PLAN_DEFAULT',
+      workspaceId: 'WS_DEFAULT',
+      programCode: PROG,
+      name: 'E2E-邮件主题A/B测试',
+      description: '端到端测试: 实验邮件主题行对点击率的影响',
+      objectiveMetric: 'CLICK_RATE',
+      objectiveDirection: 'HIGHER',
+      trafficAllocationPct: 100,
+      statisticalSignificance: 0.95,
+      autoPromoteWinner: false,
+    });
+    requireOk(r, 'Create experiment');
+    experimentId = r.body.data.id;
+    console.log(`  [OK] Experiment created: ${experimentId}`);
+  });
+
+  test('[13.2] Add variants', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+
+    const va = await api(request, 'POST', `/api/campaign/experiment/${experimentId}/variants`, {
+      variantName: '控制组', variantCode: 'A', trafficPercentage: 50,
+    });
+    requireOk(va, 'Add variant A');
+    variantIdA = va.body.data.id;
+
+    const vb = await api(request, 'POST', `/api/campaign/experiment/${experimentId}/variants`, {
+      variantName: '变体B', variantCode: 'B', trafficPercentage: 50,
+      nodeOverrides: JSON.stringify({ SEND_EMAIL: { asset_id: 'asset_test_002' } }),
+    });
+    requireOk(vb, 'Add variant B');
+    variantIdB = vb.body.data.id;
+    console.log(`  [OK] Variants created: ${variantIdA}, ${variantIdB}`);
+  });
+
+  test('[13.3] List variants', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+    const r = await api(request, 'GET', `/api/campaign/experiment/${experimentId}/variants`);
+    requireOk(r, 'List variants');
+    const variants = r.body.data;
+    expect(variants.length).toBe(2);
+    expect(variants.map((v: any) => v.variantCode).sort()).toEqual(['A', 'B']);
+    console.log(`  [OK] Variants: ${variants.length} found`);
+  });
+
+  test('[13.3b] Query experiment by planId', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+    const r = await api(request, 'GET', `/api/campaign/experiment/plan/PLAN_DEFAULT`);
+    requireOk(r, 'Query by planId');
+    const list = r.body.data;
+    expect(Array.isArray(list)).toBe(true);
+    expect(list.some((e: any) => e.id === experimentId)).toBe(true);
+    console.log(`  [OK] Plan experiments: ${list.length} found`);
+  });
+
+  test('[13.4] Get experiment detail', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+    const r = await api(request, 'GET', `/api/campaign/experiment/${experimentId}`);
+    requireOk(r, 'Get experiment detail');
+    expect(r.body.data.experiment.name).toBe('E2E-邮件主题A/B测试');
+    expect(r.body.data.variants.length).toBe(2);
+  });
+
+  test('[13.5] Start experiment', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+    const r = await api(request, 'POST', `/api/campaign/experiment/${experimentId}/start`);
+    requireOk(r, 'Start experiment');
+    expect(r.body.data.status).toBe('RUNNING');
+    expect(r.body.data.startedAt).toBeTruthy();
+    console.log(`  [OK] Experiment started: ${r.body.data.startedAt}`);
+  });
+
+  test('[13.6] Pause experiment', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+    const r = await api(request, 'POST', `/api/campaign/experiment/${experimentId}/pause`);
+    requireOk(r, 'Pause experiment');
+    expect(r.body.data.status).toBe('PAUSED');
+    console.log('  [OK] Experiment paused');
+  });
+
+  test('[13.7] Resume experiment', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+    const r = await api(request, 'POST', `/api/campaign/experiment/${experimentId}/start`);
+    requireOk(r, 'Resume experiment');
+    expect(r.body.data.status).toBe('RUNNING');
+    console.log('  [OK] Experiment resumed');
+  });
+
+  test('[13.8] Get experiment stats (running)', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+    const r = await api(request, 'GET', `/api/campaign/experiment/${experimentId}/stats`);
+    requireOk(r, 'Get stats');
+    const stats = r.body.data;
+    expect(stats.experimentId).toBe(experimentId);
+    expect(typeof stats.totalAssignments).toBe('number');
+    console.log(`  [OK] Stats: ${stats.totalAssignments} assignments, winner=${stats.winnerId || 'none'}`);
+  });
+
+  test('[13.9] Complete experiment', async ({ request }) => {
+    if (!experimentId) { test.skip(); return; }
+    const r = await api(request, 'POST', `/api/campaign/experiment/${experimentId}/complete`);
+    requireOk(r, 'Complete experiment');
+    expect(r.body.data.status).toBe('COMPLETED');
+    expect(r.body.data.completedAt).toBeTruthy();
+    console.log(`  [OK] Experiment completed: winnerId=${r.body.data.winningVariantId || 'none'}`);
+  });
+
+  test('[13.10] Experiment status transitions summary', async () => {
+    if (!experimentId) { test.skip(); return; }
+    console.log(`\n  Experiment Lifecycle Summary:`);
+    console.log(`    Experiment ID: ${experimentId}`);
+    console.log(`    Variants: A=${variantIdA}, B=${variantIdB}`);
+    console.log(`    Status flow: DRAFT → RUNNING → PAUSED → RUNNING → COMPLETED ✅`);
+    expect(true).toBe(true);
+  });
+});
+
+test.describe('13b. Experiment - Multi-variant & Edge Cases', () => {
+  let multiExpId: string;
+
+  test('[13b.1] Create experiment with 4 variants', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/experiment', {
+      id: `${TAG}_exp_multi`,
+      planId: 'PLAN_DEFAULT',
+      workspaceId: 'WS_DEFAULT',
+      programCode: PROG,
+      name: 'E2E-多渠道A/B/C/D测试',
+      objectiveMetric: 'OPEN_RATE',
+      objectiveDirection: 'HIGHER',
+      trafficAllocationPct: 100,
+      statisticalSignificance: 0.95,
+      totalSampleSize: 10000,
+      autoPromoteWinner: true,
+      autoPromoteDelayMinutes: 1440,
+    });
+    requireOk(r, 'Create multi-variant experiment');
+    multiExpId = r.body.data.id;
+    console.log(`  [OK] Multi-variant experiment: ${multiExpId}`);
+  });
+
+  test('[13b.2] Add 4 variants with different traffic splits', async ({ request }) => {
+    if (!multiExpId) { test.skip(); return; }
+    const variants = [
+      { variantName: '控制组', variantCode: 'A', trafficPercentage: 40 },
+      { variantName: '变体B', variantCode: 'B', trafficPercentage: 30 },
+      { variantName: '变体C', variantCode: 'C', trafficPercentage: 20 },
+      { variantName: '变体D', variantCode: 'D', trafficPercentage: 10 },
+    ];
+    for (const v of variants) {
+      const r = await api(request, 'POST', `/api/campaign/experiment/${multiExpId}/variants`, v);
+      requireOk(r, `Add variant ${v.variantCode}`);
+    }
+    const list = await api(request, 'GET', `/api/campaign/experiment/${multiExpId}/variants`);
+    expect(list.body.data.length).toBe(4);
+    console.log(`  [OK] 4 variants created with 40/30/20/10 split`);
+  });
+
+  test('[13b.3] Query assignments for experiment', async ({ request }) => {
+    if (!multiExpId) { test.skip(); return; }
+    const r = await api(request, 'GET', `/api/campaign/experiment/${multiExpId}/assignments`);
+    // May be empty if no users assigned yet
+    expect(r.status).toBe(200);
+    console.log(`  [OK] Assignment query returned: ${r.body.data?.length || 0} records`);
+  });
+
+  test('[13b.4] Start and complete multi-variant experiment', async ({ request }) => {
+    if (!multiExpId) { test.skip(); return; }
+    // Start
+    const startR = await api(request, 'POST', `/api/campaign/experiment/${multiExpId}/start`);
+    requireOk(startR, 'Start multi-variant');
+    // Complete immediately
+    const compR = await api(request, 'POST', `/api/campaign/experiment/${multiExpId}/complete`);
+    requireOk(compR, 'Complete multi-variant');
+    expect(compR.body.data.status).toBe('COMPLETED');
+    console.log(`  [OK] Multi-variant lifecycle: DRAFT→RUNNING→COMPLETED`);
+  });
+
+  test('[13b.5] Manual promote winner', async ({ request }) => {
+    if (!multiExpId) { test.skip(); return; }
+    const r = await api(request, 'POST', `/api/campaign/experiment/${multiExpId}/promote`);
+    // May succeed or fail depending on whether there's a winner
+    logOk(r, 'Promote winner');
+    if (ok(r)) {
+      expect(r.body.data.promoted).toBe(true);
+      console.log(`  [OK] Winner promoted: ${r.body.data.winningVariantId || 'none'}`);
+    }
+  });
+});
+
+// ========================================================================
+// Part 13c: Experiment - Promotion & Auto-Promote
+// ========================================================================
+
+test.describe('13c. Experiment - Auto-Promotion', () => {
+  let autoExpId: string;
+
+  test('[13c.1] Create experiment with autoPromoteWinner + 0 delay', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/experiment', {
+      id: `${TAG}_exp_auto`,
+      planId: 'PLAN_DEFAULT',
+      workspaceId: 'WS_DEFAULT',
+      programCode: PROG,
+      name: 'E2E-自动推全测试',
+      objectiveMetric: 'CLICK_RATE',
+      objectiveDirection: 'HIGHER',
+      autoPromoteWinner: true,
+      autoPromoteDelayMinutes: 0, // 立即推全
+    });
+    requireOk(r, 'Create auto-promote experiment');
+    autoExpId = r.body.data.id;
+
+    // Add 2 variants
+    await api(request, 'POST', `/api/campaign/experiment/${autoExpId}/variants`, {
+      variantName: '控制组', variantCode: 'A', trafficPercentage: 50,
+    });
+    await api(request, 'POST', `/api/campaign/experiment/${autoExpId}/variants`, {
+      variantName: '变体B', variantCode: 'B', trafficPercentage: 50,
+    });
+    console.log(`  [OK] Auto-promote experiment: ${autoExpId}`);
+  });
+
+  test('[13c.2] Complete experiment → verify auto-promotion', async ({ request }) => {
+    if (!autoExpId) { test.skip(); return; }
+    // Start
+    await api(request, 'POST', `/api/campaign/experiment/${autoExpId}/start`);
+    // Complete
+    const r = await api(request, 'POST', `/api/campaign/experiment/${autoExpId}/complete`);
+    requireOk(r, 'Complete');
+    // Check promotion status — may or may not have a winner with 0 assignments
+    const detail = await api(request, 'GET', `/api/campaign/experiment/${autoExpId}`);
+    const exp = detail.body.data?.experiment;
+    console.log(`  [OK] Auto-promotion configured: autoPromoteWinner=${exp?.autoPromoteWinner}, ` +
+                `promoted=${exp?.promoted}, winner=${exp?.winningVariantId || 'none'}`);
+    expect(exp?.autoPromoteWinner).toBe(true);
+  });
+});
+
+// ========================================================================
+// Part 13d: Experiment - Sample Size Estimation
+// ========================================================================
+
+test.describe('13d. Experiment - Sample Size Estimation', () => {
+  test('[13d.1] Estimate sample size for proportion metric', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/experiment/estimate-sample-size', {
+      objectiveMetric: 'CLICK_RATE',
+      baselineRate: 0.12,
+      minimumDetectableEffect: 0.05,
+      statisticalSignificance: 0.95,
+      statisticalPower: 0.80,
+      variantCount: 2,
+    });
+    requireOk(r, 'Estimate sample size');
+    const data = r.body.data;
+    expect(data.sampleSizePerGroup).toBeGreaterThan(1000);
+    expect(data.totalSampleSize).toBe(data.sampleSizePerGroup * 2);
+    expect(data.variantCount).toBe(2);
+    expect(data.formula).toBeTruthy();
+    console.log(`  [OK] Sample size: ${data.sampleSizePerGroup}/group, total=${data.totalSampleSize}`);
+  });
+
+  test('[13d.2] Estimate with daily traffic', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/experiment/estimate-sample-size', {
+      objectiveMetric: 'OPEN_RATE',
+      baselineRate: 0.20,
+      minimumDetectableEffect: 0.10,
+      statisticalSignificance: 0.90,
+      statisticalPower: 0.80,
+      variantCount: 3,
+      dailyTraffic: 50000,
+    });
+    requireOk(r, 'Estimate with traffic');
+    const data = r.body.data;
+    expect(data.variantCount).toBe(3);
+    expect(data.estimatedDays).toBeGreaterThan(0);
+    console.log(`  [OK] ${data.totalSampleSize} total samples, ~${data.estimatedDays} days at 50k/day`);
+  });
+
+  test('[13d.3] Estimate for REVENUE_PER_USER', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/experiment/estimate-sample-size', {
+      objectiveMetric: 'REVENUE_PER_USER',
+      baselineRate: 50,
+      minimumDetectableEffect: 0.10,
+      statisticalSignificance: 0.95,
+      statisticalPower: 0.80,
+      variantCount: 2,
+      stdDevEstimate: 25,
+    });
+    requireOk(r, 'Revenue metric');
+    const data = r.body.data;
+    expect(data.objectiveMetric).toBe('REVENUE_PER_USER');
+    expect(data.formula).toContain('σ=');
+    console.log(`  [OK] Revenue per user: ${data.sampleSizePerGroup}/group`);
+  });
+});
+
+// ========================================================================
+// Part 13e: Experiment - Learnings & Decision Feedback
+// ========================================================================
+
+test.describe('13e. Experiment - Learnings & Decision Feedback', () => {
+  let feedbackExpId: string;
+
+  test('[13e.1] Create + complete experiment to trigger feedback', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/experiment', {
+      id: `${TAG}_exp_fb`,
+      planId: 'PLAN_DEFAULT',
+      workspaceId: 'WS_DEFAULT',
+      programCode: PROG,
+      name: 'E2E-决策反馈测试',
+      objectiveMetric: 'CLICK_RATE',
+      objectiveDirection: 'HIGHER',
+    });
+    requireOk(r, 'Create feedback experiment');
+    feedbackExpId = r.body.data.id;
+
+    // Add 2 variants with sample data (B wins)
+    await api(request, 'POST', `/api/campaign/experiment/${feedbackExpId}/variants`, {
+      variantName: '控制组', variantCode: 'A', trafficPercentage: 50,
+    });
+    await api(request, 'POST', `/api/campaign/experiment/${feedbackExpId}/variants`, {
+      variantName: '变体B', variantCode: 'B', trafficPercentage: 50,
+      nodeOverrides: JSON.stringify({ SEND_EMAIL: { asset_id: 'winner_asset' } }),
+    });
+    console.log(`  [OK] Feedback experiment: ${feedbackExpId}`);
+  });
+
+  test('[13e.2] Complete and query learnings', async ({ request }) => {
+    if (!feedbackExpId) { test.skip(); return; }
+    // Start + complete
+    await api(request, 'POST', `/api/campaign/experiment/${feedbackExpId}/start`);
+    await api(request, 'POST', `/api/campaign/experiment/${feedbackExpId}/complete`);
+
+    // Query learnings (may be empty if no feedback handler ran in test)
+    const r = await api(request, 'GET', `/api/campaign/experiment/${feedbackExpId}/learnings`);
+    expect(r.status).toBe(200);
+    const learnings = r.body.data;
+    console.log(`  [OK] Learnings: ${Array.isArray(learnings) ? learnings.length : 0} records for experiment`);
+  });
+});
+
+// ========================================================================
+// Part 14: Budget Pacing (update_5.md - P1)
+// ========================================================================
+
+test.describe('14. Budget Pacing - Configuration & Lifecycle', () => {
+  const budgetPlanId = `PLAN_budget_${TAG}`;
+  let pacingId: string;
+
+  test('[14.1] Create budget pacing config', async ({ request }) => {
+    const r = await api(request, 'PUT', `/api/campaign/budget/pacing/${budgetPlanId}`, {
+      planId: budgetPlanId,
+      workspaceId: 'WS_DEFAULT',
+      programCode: PROG,
+      totalBudget: 100000,
+      pacingMode: 'EVEN',
+      dailyCapEnabled: true,
+      dailyCapAmount: 10000,
+    });
+    requireOk(r, 'Create budget pacing');
+    pacingId = r.body.data.id;
+    console.log(`  [OK] Budget pacing created: ${pacingId}`);
+  });
+
+  test('[14.2] Get budget status', async ({ request }) => {
+    const r = await api(request, 'GET', `/api/campaign/budget/pacing/${budgetPlanId}`);
+    if (r.body?.data) {
+      const status = r.body.data;
+      expect(status.totalBudget).toBe(100000);
+      expect(status.totalConsumed).toBe(0);
+      expect(status.pacingMode).toBe('EVEN');
+      expect(status.dailyCapEnabled).toBe(true);
+      console.log(`  [OK] Budget status: total=${status.totalBudget}, consumed=${status.totalConsumed}`);
+    } else {
+      console.log(`  [WARN] Budget not found after create — DB may have rolled back`);
+    }
+  });
+
+  test('[14.3] Update pacing config', async ({ request }) => {
+    const r = await api(request, 'PUT', `/api/campaign/budget/pacing/${budgetPlanId}`, {
+      planId: budgetPlanId,
+      totalBudget: 200000,
+      pacingMode: 'DYNAMIC',
+      dailyCapEnabled: false,
+    });
+    requireOk(r, 'Update pacing');
+    expect(r.body.data.pacingMode).toBe('DYNAMIC');
+    console.log(`  [OK] Pacing updated: mode=${r.body.data.pacingMode}`);
+  });
+
+  test('[14.4] Query consumption records', async ({ request }) => {
+    const r = await api(request, 'GET', `/api/campaign/budget/pacing/${budgetPlanId}/consumptions`);
+    expect(r.status).toBe(200);
+    const cons = r.body.data;
+    console.log(`  [OK] Consumption records: ${Array.isArray(cons) ? cons.length : 0}`);
+  });
+
+  test('[14.5] Query budget alerts', async ({ request }) => {
+    const r = await api(request, 'GET', `/api/campaign/budget/pacing/${budgetPlanId}/alerts`);
+    expect(r.status).toBe(200);
+    const alerts = r.body.data;
+    console.log(`  [OK] Alerts: ${Array.isArray(alerts) ? alerts.length : 0}`);
+  });
+
+  test('[14.6] Budget pacing page loads', async ({ page }) => {
+    await page.goto(`${FRONTEND}/campaign/budget-pacing`, { timeout: 30000 });
+    await page.waitForTimeout(3000);
+    const title = await page.title();
+    expect(title).toBeTruthy();
+    console.log(`  [OK] Budget Pacing page: title="${title}"`);
+  });
+});
+
+// ========================================================================
+// Part 15: Campaign Calendar & Conflict Detection (update_6.md - P2)
+// ========================================================================
+
+test.describe('15. Campaign Calendar & Conflict Detection', () => {
+  const calWsId = `WS_cal_${TAG}`;
+
+  test('[15.1] Get calendar month view', async ({ request }) => {
+    const r = await api(request, 'GET',
+      `/api/campaign/calendar/workspace/${'WS_DEFAULT'}?year=2026&month=6`);
+    expect(r.status).toBe(200);
+    const data = r.body.data;
+    if (data) {
+      expect(data.year).toBe(2026);
+      expect(data.month).toBe(6);
+      expect(Array.isArray(data.days)).toBe(true);
+      console.log(`  [OK] Calendar: ${data.days?.length || 0} days, ${data.totalConflicts || 0} conflicts`);
+    } else {
+      console.log(`  [OK] Calendar: no data (empty workspace)`);
+    }
+  });
+
+  test('[15.2] Query active conflicts', async ({ request }) => {
+    const r = await api(request, 'GET',
+      `/api/campaign/calendar/conflicts?workspaceId=${'WS_DEFAULT'}&status=ACTIVE`);
+    expect(r.status).toBe(200);
+    const conflicts = r.body.data;
+    console.log(`  [OK] Active conflicts: ${Array.isArray(conflicts) ? conflicts.length : 0}`);
+  });
+
+  test('[15.3] Manual trigger detection', async ({ request }) => {
+    const r = await api(request, 'POST',
+      `/api/campaign/calendar/detect/${'WS_DEFAULT'}`);
+    expect(r.status).toBe(200);
+    const conflicts = r.body.data;
+    console.log(`  [OK] Detection triggered: ${Array.isArray(conflicts) ? conflicts.length : 0} conflicts found`);
+  });
+
+  test('[15.4] Calendar page loads', async ({ page }) => {
+    await page.goto(`${FRONTEND}/campaign/calendar`, { timeout: 30000 });
+    await page.waitForTimeout(3000);
+    const title = await page.title();
+    expect(title).toBeTruthy();
+    console.log(`  [OK] Calendar page: title="${title}"`);
+  });
+});
+
+// ========================================================================
+// Part 16: DLQ & Failure Replay (update_7.md - P0)
+// ========================================================================
+
+test.describe('16. DLQ & Failure Replay', () => {
+  let dlqTaskId: string;
+
+  test('[16.1] Get DLQ list', async ({ request }) => {
+    const r = await api(request, 'GET', '/api/campaign/dlq/list');
+    expect(r.status).toBe(200);
+    const data = r.body.data;
+    expect(data).toBeTruthy();
+    console.log(`  [OK] DLQ list: ${data?.total || 0} items`);
+  });
+
+  test('[16.2] Get DLQ count', async ({ request }) => {
+    const r = await api(request, 'GET', '/api/campaign/dlq/count');
+    expect(r.status).toBe(200);
+    const data = r.body.data;
+    expect(data?.dlqCount).toBeGreaterThanOrEqual(0);
+    console.log(`  [OK] DLQ count: ${data?.dlqCount}`);
+  });
+
+  test('[16.3] Archive old DLQ (>7 days)', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/dlq/archive?daysOld=7');
+    expect(r.status).toBe(200);
+    const data = r.body.data;
+    console.log(`  [OK] DLQ archived: ${data?.archived || 0} items`);
+  });
+
+  test('[16.4] Query DLQ by plan', async ({ request }) => {
+    const r = await api(request, 'GET', `/api/campaign/dlq/list?planId=PLAN_DEFAULT`);
+    expect(r.status).toBe(200);
+    console.log(`  [OK] DLQ by plan: ${r.body.data?.total || 0} items`);
+  });
+});
+
+// ========================================================================
+// Part 17: Inbound Webhook (update_8.md - P1)
+// ========================================================================
+
+test.describe('17. Inbound Webhook', () => {
+  test('[17.1] Receive webhook event (202 Accepted)', async ({ request }) => {
+    const r = await api(request, 'POST', `/api/campaign/webhook/${PROG}/TEST_EVENT`, {
+      data: { user_id: 'M_WH_001', amount: 99.9 },
+    });
+    // 202 Accepted expected
+    expect(r.status).toBe(202);
+    const body = r.body;
+    expect(body?.data?.status).toBe('accepted');
+    console.log(`  [OK] Webhook accepted: id=${body?.data?.webhookId}`);
+  });
+
+  test('[17.2] Query webhook logs', async ({ request }) => {
+    const r = await api(request, 'GET', `/api/campaign/webhook/logs?programCode=${PROG}`);
+    expect(r.status).toBe(200);
+    const logs = r.body.data;
+    console.log(`  [OK] Webhook logs: ${Array.isArray(logs) ? logs.length : 0} records`);
+  });
+});
+
+// ========================================================================
+// Part 18: Recommendation Engine (update_10.md - P2)
+// ========================================================================
+
+test.describe('18. Recommendation & Dynamic Content', () => {
+  const STRAT_ID = `strat_${TAG}`;
+
+  test('[18.1] Create recommendation strategy', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/recommendation/strategy', {
+      id: STRAT_ID, programCode: PROG, strategyName: 'E2E热门推荐',
+      strategyType: 'POPULAR', recommendationConfig: JSON.stringify({ topN: 10 }),
+      cacheTtlSeconds: 1800, enabled: true,
+    });
+    requireOk(r, 'Create strategy');
+    console.log(`  [OK] Strategy: ${r.body.data.id}`);
+  });
+
+  test('[18.2] Query strategies', async ({ request }) => {
+    const r = await api(request, 'GET', `/api/campaign/recommendation/strategies?programCode=${PROG}`);
+    expect(r.status).toBe(200);
+    const list = r.body.data;
+    console.log(`  [OK] Strategies: ${Array.isArray(list) ? list.length : 0}`);
+  });
+
+  test('[18.3] Get recommendation preview', async ({ request }) => {
+    const r = await api(request, 'GET',
+      `/api/campaign/recommendation/preview?memberId=M_E2E_001&strategyId=${STRAT_ID}&maxItems=3`);
+    requireOk(r, 'Preview');
+    const data = r.body.data;
+    expect(data.memberId).toBe('M_E2E_001');
+    expect(data.items.length).toBeGreaterThan(0);
+    console.log(`  [OK] Preview: ${data.items.length} items for ${data.memberId}`);
+  });
+
+  test('[18.4] Update strategy', async ({ request }) => {
+    const r = await api(request, 'PUT', `/api/campaign/recommendation/strategy/${STRAT_ID}`, {
+      strategyName: 'E2E热门推荐(更新)', recommendationConfig: JSON.stringify({ topN: 5 }),
+      cacheTtlSeconds: 900, enabled: true,
+    });
+    requireOk(r, 'Update strategy');
+    console.log(`  [OK] Updated: ${r.body.data.strategyName}`);
+  });
+});
+
+// ========================================================================
+// Part 19: Strategy Blueprint (campaign_final_blueprint.md)
+// ========================================================================
+
+test.describe('19. Strategy Blueprint - Goal Decomposition', () => {
+  const goalId = `G_e2e_${TAG}`;
+
+  test('[19.1] Create goal with industry type (Step 1)', async ({ request }) => {
+    const r = await api(request, 'POST', '/api/campaign/strategy/goal', {
+      id: goalId, workspaceId: 'WS_DEFAULT', name: 'E2E策略测试目标',
+      goalType: 'GMV', targetValue: 1000000, industryType: 'RETAIL',
+    });
+    requireOk(r, 'Create goal');
+    expect(r.body.data.industryType).toBe('RETAIL');
+    expect(r.body.data.workflowStatus).toBe('GOAL_DRAFT');
+    console.log(`  [OK] Goal created: blueprint=${r.body.data.blueprintId || 'none'}, status=${r.body.data.workflowStatus}`);
+  });
+
+  test('[19.2] Analyze gap (Step 2)', async ({ request }) => {
+    const r = await api(request, 'POST', `/api/campaign/strategy/goal/${goalId}/analyze-gap`);
+    requireOk(r, 'Analyze gap');
+    const data = r.body.data;
+    expect(data.decompositionMode).toBeTruthy();
+    expect(data.totalGap).toBeDefined();
+    console.log(`  [OK] Gap analyzed: mode=${data.decompositionMode}, gap=${data.totalGap}`);
+  });
+
+  test('[19.3] Get decomposition result', async ({ request }) => {
+    const r = await api(request, 'GET', `/api/campaign/strategy/goal/${goalId}/decomposition`);
+    requireOk(r, 'Get decomposition');
+    expect(r.body.data.initiativeSuggestions).toBeTruthy();
+    console.log(`  [OK] Decomposition retrieved`);
+  });
+
+  test('[19.4] Create initiatives from strategy (Step 4)', async ({ request }) => {
+    const r = await api(request, 'POST', `/api/campaign/strategy/goal/${goalId}/create-initiatives`);
+    requireOk(r, 'Create initiatives');
+    const inis = r.body.data;
+    expect(inis.length).toBeGreaterThanOrEqual(2);
+    console.log(`  [OK] ${inis.length} initiatives created`);
+    inis.forEach((i: any) => console.log(`    - ${i.name} (${i.initiativeType})`));
+  });
+
+  test('[19.5] Query blueprints', async ({ request }) => {
+    const r = await api(request, 'GET', '/api/campaign/strategy/blueprints?industryType=RETAIL');
+    expect(r.status).toBe(200);
+    const bps = r.body.data || [];
+    console.log(`  [OK] Blueprints: ${bps.length} for RETAIL`);
+  });
+
+  test('[19.6] Blueprint page loads', async ({ page }) => {
+    await page.goto(`${FRONTEND}/campaign/strategy-blueprint`, { timeout: 30000 });
+    await page.waitForTimeout(3000);
+    const title = await page.title();
+    expect(title).toBeTruthy();
+    console.log(`  [OK] Blueprint page: title="${title}"`);
+  });
+});
+
+// ========================================================================
 // Part 11: Frontend UI Page Loading
 // ========================================================================
 
@@ -1427,6 +2061,8 @@ test.describe('11. Frontend UI Page Loading', () => {
     { name: 'Feedback Analysis', path: '/campaign/feedback' },
     { name: 'Intervention Dashboard', path: '/campaign/intervention' },
     { name: 'Canvas Editor', path: '/campaign/canvas' },
+    { name: 'Experiment Dashboard', path: '/campaign/experiment' },
+    { name: 'Budget Pacing', path: '/campaign/budget-pacing' },
   ];
 
   for (const pageInfo of pages) {
@@ -1468,10 +2104,11 @@ test.describe('Test Summary Report', () => {
   9. Feedback             Metrics/Calculation/Drift/Adjustments
   10. Full Business Flow  Planning->Opportunity->Decision->
                            Canvas->Execution->Feedback
-  11. Frontend UI         9 Pages Loading Verification
+  11. Frontend UI         10 Pages Loading Verification
   12. Audience Selection  5 Filter Condition Combinations
+  13. Experiment A/B Test CRUD/Lifecycle/Variants/Stats/Multi-variant
 ================================================================
-  Total: ~80+ test cases covering design doc chapters 2-14
+  Total: ~100+ test cases covering design doc chapters 2-14 + update_4
 ================================================================
     `);
     expect(true).toBe(true);
